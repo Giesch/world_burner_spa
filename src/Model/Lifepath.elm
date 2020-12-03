@@ -68,7 +68,9 @@ type alias LifepathJson =
 
 type alias LifepathSkill =
     { skillId : Int
-    , subskillName : Maybe String
+    , displayName : String
+    , magical : Bool
+    , training : Bool
     }
 
 
@@ -162,7 +164,9 @@ lifepathSkillDecoder : Decoder LifepathSkill
 lifepathSkillDecoder =
     Decode.succeed LifepathSkill
         |> required "skillId" Decode.int
-        |> optional "subskillName" (Decode.map Just Decode.string) Nothing
+        |> required "displayName" Decode.string
+        |> required "magical" Decode.bool
+        |> required "training" Decode.bool
 
 
 lifepathTraitDecoder : Decoder LifepathTrait
@@ -234,11 +238,7 @@ viewSkills : Int -> List LifepathSkill -> Element msg
 viewSkills pts skills =
     let
         skillNames =
-            String.join ", " <| (skills |> List.map .skillId |> List.map String.fromInt)
-
-        -- TODO
-        -- skillNames =
-        --     String.join ", " <| List.map (\sk -> toTitleCase <| .displayName sk) skills
+            String.join ", " <| List.map (\sk -> toTitleCase <| .displayName sk) skills
     in
     case ( pts, List.length skills ) of
         ( 0, 0 ) ->
