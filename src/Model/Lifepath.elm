@@ -301,15 +301,13 @@ viewTraits : Int -> List Trait -> Element msg
 viewTraits pts traits =
     let
         traitNames =
-            -- TODO
-            --     String.join ", " <| List.map (\tr -> toTitleCase <| Trait.name tr) traits
-            String.join ", " <| List.map (\tr -> "trait") traits
+            String.join ", " <| List.map (Trait.name >> toTitleCase) traits
     in
-    case ( pts, List.length traits ) of
-        ( 0, 0 ) ->
+    case ( List.isEmpty traits, pts ) of
+        ( True, 0 ) ->
             none
 
-        ( _, 0 ) ->
+        ( True, _ ) ->
             paragraph []
                 [ text ("Traits: " ++ String.fromInt pts) ]
 

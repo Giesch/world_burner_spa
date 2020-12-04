@@ -71,15 +71,23 @@ view :
 view { page, toMsg } model =
     { title = page.title
     , body =
+        let
+            routeLink route label =
+                link [ Font.color Colors.white, Font.underline ]
+                    { url = Route.toString route, label = text label }
+        in
         [ column
             [ height fill, width fill, scrollbarY ]
-            [ row [ padding 20, spacing 20, height fill, width fill ]
-                [ link [ Font.color (rgb 0 0.25 0.5), Font.underline ]
-                    { url = Route.toString Route.Top, label = text "Homepage" }
-                , link [ Font.color (rgb 0 0.25 0.5), Font.underline ]
-                    { url = Route.toString Route.Create, label = text "Create" }
-                , link [ Font.color (rgb 0 0.25 0.5), Font.underline ]
-                    { url = Route.toString Route.NotFound, label = text "Not found" }
+            [ row
+                [ padding 20
+                , spacing 20
+                , height fill
+                , width fill
+                , Background.color Colors.darkened
+                ]
+                [ routeLink Route.Top "Homepage"
+                , routeLink Route.Create "Create"
+                , routeLink Route.NotFound "Not Found"
                 ]
             , column [ height fill, width fill, scrollbarY ] page.body
             ]

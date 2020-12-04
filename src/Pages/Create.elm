@@ -3,6 +3,7 @@ module Pages.Create exposing (Model, Msg, Params, page)
 import Api
 import Array exposing (Array)
 import Colors
+import Common
 import Components.LifepathFilter as LifepathFilter exposing (LifepathFilter)
 import Components.Workbench as Workbench exposing (Workbench)
 import DnD.Beacon as Beacon
@@ -366,7 +367,14 @@ viewFullPage model =
     let
         viewPage : { workbench : Element Msg, draggedBlock : Element Msg } -> Element Msg
         viewPage { workbench, draggedBlock } =
-            row [ width fill, height fill, scrollbarY, spacing 40 ]
+            row
+                ([ width fill
+                 , height fill
+                 , scrollbarY
+                 , spacing 40
+                 ]
+                    ++ Common.scrollbarsFix
+                )
                 [ viewSidebar model
                 , workbench
                 , draggedBlock

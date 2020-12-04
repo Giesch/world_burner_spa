@@ -4,6 +4,7 @@ module Common exposing
     , keepIf
     , minimumBy
     , pairDecoder
+    , scrollbarsFix
     , splitAt
     , userSelectNone
     )
@@ -110,3 +111,14 @@ pairDecoder decodeA decodeB =
     Decode.map2 Tuple.pair
         (Decode.index 0 decodeA)
         (Decode.index 1 decodeB)
+
+
+{-| Fix for an elm-ui scrollbars bug.
+This should go on the lowest row ancestor of the element that should scroll.
+<https://discourse.elm-lang.org/t/elm-ui-parent-element-grows-to-encompass-children-instead-of-scrolling/5032/5>
+-}
+scrollbarsFix : List (Element.Attribute msg)
+scrollbarsFix =
+    [ Element.clip
+    , Element.htmlAttribute (Html.Attributes.style "flex-shrink" "1")
+    ]
