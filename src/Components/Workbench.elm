@@ -221,8 +221,9 @@ view (Workbench slots) opts =
         , padding 40
         , centerX
         , centerY
-        , height <| px 500
+        , height fill
         , width fill
+        , scrollbarY
         ]
     <|
         if Array.isEmpty fullSlots then
@@ -274,22 +275,24 @@ openSlot position { hover } =
 
                 _ ->
                     False
-    in
-    if beingHovered then
-        el
-            (Beacon.dropBeacon (Beacon.OpenSlot position)
-                :: Colors.successGlow
-                :: slotAttrs
-            )
-            (el [ centerX, centerY ] <| text "+")
 
-    else
-        el
-            (Beacon.dropBeacon (Beacon.OpenSlot position)
-                :: Border.width 1
-                :: slotAttrs
-            )
-            (el [ centerX, centerY ] <| text "+")
+        attrs : List (Attribute msg)
+        attrs =
+            if beingHovered then
+                Beacon.dropBeacon (Beacon.OpenSlot position)
+                    :: Colors.successGlow
+                    :: slotAttrs
+
+            else
+                Beacon.dropBeacon (Beacon.OpenSlot position)
+                    :: Border.width 1
+                    :: slotAttrs
+
+        content : Element msg
+        content =
+            el [ centerX, centerY ] <| text "+"
+    in
+    el attrs content
 
 
 type alias DraggedBlockOptions =
@@ -373,7 +376,7 @@ slotAttrs =
     , Border.rounded 8
     , Border.color Colors.darkened
     , width <| px 350
-    , height fill
+    , height (fill |> maximum 500)
     , spacing 20
     , padding 12
     , centerX

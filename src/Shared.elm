@@ -81,7 +81,7 @@ view { page, toMsg } model =
             [ row
                 [ padding 20
                 , spacing 20
-                , height fill
+                , height (fill |> maximum 60)
                 , width fill
                 , Background.color Colors.darkened
                 ]
