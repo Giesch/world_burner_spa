@@ -1,6 +1,5 @@
 module Model.Lifepath exposing
-    ( Lead
-    , Lifepath
+    ( Lifepath
     , LifepathSkill
     , decoder
     , lifepathWidth
@@ -17,6 +16,7 @@ import Element.Font as Font
 import Json.Decode as Decode exposing (Decoder)
 import Json.Decode.Pipeline exposing (optional, required)
 import Model.Lifepath.GenSkills as GenSkills exposing (GenSkills)
+import Model.Lifepath.Lead as Lead exposing (Lead)
 import Model.Lifepath.Requirement as Requirement exposing (Requirement)
 import Model.Lifepath.Resources as Resources exposing (Resources)
 import Model.Lifepath.StatMod as StatMod exposing (StatMod)
@@ -39,7 +39,7 @@ type alias Lifepath =
     , skillPts : Int
     , traitPts : Int
     , skills : List LifepathSkill
-    , traits : List LifepathTrait
+    , traits : List Trait
     , born : Bool
     , requirement : Maybe Requirement
     , searchContent : List String
@@ -60,7 +60,7 @@ type alias LifepathJson =
     , skillPts : Int
     , traitPts : Int
     , skills : List LifepathSkill
-    , traits : List LifepathTrait
+    , traits : List Trait
     , born : Bool
     , requirement : Maybe Requirement
     }
@@ -79,13 +79,6 @@ type LifepathTrait
     | Entryless String
 
 
-type alias Lead =
-    { settingName : String
-    , settingId : Int
-    , settingPage : Int
-    }
-
-
 
 -- DECODE
 
@@ -101,14 +94,12 @@ decoder =
         |> required "years" Years.decoder
         |> required "statMod" StatMod.decoder
         |> required "resources" Resources.decoder
-        -- TODO
-        -- |> required "leads" (Decode.list leadDecoder)
-        |> required "leads" (Decode.succeed [])
+        |> required "leads" (Decode.list Lead.decoder)
         |> required "genSkills" GenSkills.decoder
         |> required "skillPts" Decode.int
         |> required "traitPts" Decode.int
         |> required "skillList" (Decode.list lifepathSkillDecoder)
-        |> required "traitList" (Decode.list lifepathTraitDecoder)
+        |> required "traitList" (Decode.list Trait.decoder)
         |> required "born" Decode.bool
         |> optional "requirement" (Decode.map Just Requirement.decoder) Nothing
         |> Decode.map addSearchContent
@@ -150,14 +141,6 @@ searchContent json =
             []
     in
     json.name :: json.settingName :: skills ++ traits
-
-
-leadDecoder : Decoder Lead
-leadDecoder =
-    Decode.succeed Lead
-        |> required "settingName" Decode.string
-        |> required "settingId" Decode.int
-        |> required "settingPage" Decode.int
 
 
 lifepathSkillDecoder : Decoder LifepathSkill
@@ -314,7 +297,7 @@ viewLeads leads =
             [ text <| "Leads: " ++ leadNames ]
 
 
-viewTraits : Int -> List LifepathTrait -> Element msg
+viewTraits : Int -> List Trait -> Element msg
 viewTraits pts traits =
     let
         traitNames =

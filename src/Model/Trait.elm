@@ -1,11 +1,9 @@
 module Model.Trait exposing
     ( Trait
     , TraitType
-    , cost
     , decoder
-    , entry
+    , kind
     , name
-    , taip
     )
 
 import Json.Decode as Decode exposing (Decoder)
@@ -13,16 +11,13 @@ import Json.Decode.Pipeline as Pipeline exposing (optional, required)
 
 
 type Trait
-    = TraitEntry TraitEntryProps
-    | CharTrait String
+    = Entry TraitEntry
+    | Entryless String
 
 
-type alias TraitEntryProps =
+type alias TraitEntry =
     { name : String
-    , traitId : Int
-    , page : Int
-    , cost : Maybe Int
-    , taip : TraitType
+    , kind : TraitType
     }
 
 
@@ -32,44 +27,24 @@ type TraitType
     | Die
 
 
-entry : Trait -> Maybe { traitId : Int, page : Int }
-entry trait =
-    case trait of
-        CharTrait _ ->
-            Nothing
-
-        TraitEntry props ->
-            Just { traitId = props.traitId, page = props.page }
-
-
 name : Trait -> String
 name trait =
     case trait of
-        CharTrait char ->
+        Entryless char ->
             char
 
-        TraitEntry props ->
+        Entry props ->
             props.name
 
 
-cost : Trait -> Maybe Int
-cost trait =
+kind : Trait -> TraitType
+kind trait =
     case trait of
-        CharTrait _ ->
-            Just 1
-
-        TraitEntry props ->
-            props.cost
-
-
-taip : Trait -> TraitType
-taip trait =
-    case trait of
-        CharTrait _ ->
+        Entryless _ ->
             Char
 
-        TraitEntry props ->
-            props.taip
+        Entry props ->
+            props.kind
 
 
 
@@ -79,31 +54,28 @@ taip trait =
 decoder : Decoder Trait
 decoder =
     Decode.field "kind" Decode.string
-        |> Decode.andThen whichTraitType
+        |> Decode.andThen traitKindDecoder
 
 
-whichTraitType : String -> Decoder Trait
-whichTraitType string =
-    case String.toLower string of
-        "traitentry" ->
+traitKindDecoder : String -> Decoder Trait
+traitKindDecoder k =
+    case k of
+        "entry" ->
             Decode.field "value" traitEntryDecoder
 
-        "chartrait" ->
+        "entryless" ->
             Decode.field "value" charTraitDecoder
 
         _ ->
-            Decode.fail <| "Invalid trait type: " ++ string
+            Decode.fail <| "Invalid trait type: " ++ k
 
 
 traitEntryDecoder : Decoder Trait
 traitEntryDecoder =
-    Decode.map TraitEntry <|
-        (Decode.succeed TraitEntryProps
+    Decode.map Entry <|
+        (Decode.succeed TraitEntry
             |> required "name" Decode.string
-            |> required "trait_id" Decode.int
-            |> required "page" Decode.int
-            |> optional "cost" (Decode.map Just Decode.int) Nothing
-            |> required "taip" traitTypeDecoder
+            |> required "kind" traitTypeDecoder
         )
 
 
@@ -130,4 +102,4 @@ traitTypeFromString string =
 
 charTraitDecoder : Decoder Trait
 charTraitDecoder =
-    Decode.map CharTrait <| Decode.field "name" Decode.string
+    Decode.map Entryless Decode.string

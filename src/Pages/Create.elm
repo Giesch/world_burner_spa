@@ -1,4 +1,4 @@
-module Pages.Lifepaths exposing (Model, Msg, Params, page)
+module Pages.Create exposing (Model, Msg, Params, page)
 
 import Api
 import Array exposing (Array)
@@ -222,10 +222,6 @@ update msg model =
 
 giveUp : Model -> String -> a -> ( Model, Cmd msg )
 giveUp model msg err =
-    let
-        _ =
-            Debug.log msg err
-    in
     ( letGo model, Cmd.none )
 
 
@@ -429,7 +425,7 @@ viewFullPage model =
                         , draggedBlock = viewDraggedBlock draggedItem cachedBlock <| Just errs
                         }
 
-                Err err ->
+                Err _ ->
                     viewPage
                         { workbench = viewBench <| hover Nothing
                         , draggedBlock = viewDraggedBlock draggedItem cachedBlock Nothing
