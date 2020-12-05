@@ -89,10 +89,7 @@ view { page, toMsg } model =
                 , width fill
                 , Background.color Colors.faint
                 ]
-                [ routeLink Route.Top "Homepage"
-                , routeLink Route.Create "Create"
-                , routeLink Route.NotFound "Not Found"
-                ]
+                []
             , row
                 [ height fill, width fill, paddingXY 100 50 ]
                 [ column
