@@ -1,33 +1,30 @@
 module Pages.Create exposing (Model, Msg, Params, page)
 
 import Api
-import Array exposing (Array)
 import Colors
-import Common
-import Components.LifepathFilter as LifepathFilter exposing (LifepathFilter)
-import Components.Workbench as Workbench exposing (Workbench)
-import DnD.Beacon as Beacon
-    exposing
-        ( BenchIndex
-        , DragBeaconId
-        , DropBeaconId
-        , HoverBeaconId
-        )
-import DnD.DragState as DragState
+import Common exposing (edges)
+import DnDList
 import Element exposing (..)
 import Element.Background as Background
+import Element.Border as Border
+import Element.Events as Events
 import Element.Font as Font
+import Element.Input as Input
+import Html.Attributes
 import Http
-import List.NonEmpty exposing (NonEmpty)
-import Model.LifeBlock as LifeBlock exposing (LifeBlock)
-import Model.LifeBlock.Validation as Validation
 import Model.Lifepath as Lifepath exposing (Lifepath)
+import Model.Lifepath.GenSkills as GenSkills exposing (GenSkills)
+import Model.Lifepath.Resources as Resources exposing (Resources)
+import Model.Lifepath.StatMod as StatMod exposing (StatMod)
+import Model.Lifepath.Trait as Trait exposing (Trait)
+import Model.Lifepath.Years as Years exposing (Years)
 import Model.Status as Status exposing (Status)
 import Process
 import Shared
 import Spa.Document exposing (Document)
 import Spa.Page as Page exposing (Page)
 import Spa.Url as Url exposing (Url)
+import String.Extra exposing (toTitleCase)
 import Task
 
 
@@ -52,51 +49,55 @@ type alias Params =
 
 
 type alias Model =
-    { searchFilter : LifepathFilter
-    , sidebarLifepaths : Status LoadedLifepaths
-    , workbench : Workbench
-    , dragState : DragState
+    { allLifepaths : Status (List Lifepath)
+    , name : String
+    , lifepaths : List Lifepath
+    , dnd : DnDList.Model
+    , modalState : Maybe ModalState
     }
 
 
-type alias LoadedLifepaths =
-    { all : Array Lifepath
-    , sidebar : Array Lifepath
+type alias ModalState =
+    { searchText : String
+    , filteredPaths : List Lifepath
+    , allLifepaths : List Lifepath
+    , selectedLifepath : Int
     }
 
 
-{-| DragState as used by this page.
--}
-type alias DragState =
-    DragState.DragState DragBeaconId DropBeaconId HoverBeaconId DragCache
+defaultModal : List Lifepath -> ModalState
+defaultModal allLifepaths =
+    { searchText = ""
+    , filteredPaths = allLifepaths
+    , allLifepaths = allLifepaths
+    , selectedLifepath = 0
+    }
 
 
-{-| The dragged block, and the workbench
-as it will look once the dragged block is removed.
--}
-type alias DragCache =
-    ( Workbench, LifeBlock )
+config : DnDList.Config Lifepath
+config =
+    { beforeUpdate = \_ _ list -> list
+    , movement = DnDList.Free
+    , listen = DnDList.OnDrag
+    , operation = DnDList.Rotate
+    }
 
 
-type InvalidModel
-    = InvalidDragState
-    | BoundsError
+system : DnDList.System Lifepath Msg
+system =
+    DnDList.create config DnDMsg
 
 
 init : Shared.Model -> Url Params -> ( Model, Cmd Msg )
 init shared { params } =
-    ( { searchFilter = LifepathFilter.none
-      , sidebarLifepaths = Status.Loading
-      , workbench = Workbench.default
-      , dragState = DragState.None
+    ( { allLifepaths = Status.Loading
+      , name = ""
+      , lifepaths = []
+      , dnd = system.model
+      , modalState = Nothing
       }
-    , fetchLifepaths
+    , Api.lifepaths GotLifepaths
     )
-
-
-fetchLifepaths : Cmd Msg
-fetchLifepaths =
-    Api.dwarves GotDwarves
 
 
 
@@ -104,251 +105,161 @@ fetchLifepaths =
 
 
 type Msg
-    = GotDwarves (Result Http.Error (List Lifepath))
-    | DragMsg Transition
-    | DeleteBenchBlock BenchIndex
-    | EnteredSearchText String
+    = GotLifepaths (Result Http.Error (List Lifepath))
+    | DnDMsg DnDList.Msg
+    | EnteredName String
+    | RemoveLifepath Int
+    | OpenModal
+    | SubmitModal (Maybe Lifepath)
+    | EnteredModalSearchText String
     | SearchTimePassed String
-      -- TODO these all need better names
-    | SetFit LifeBlock.Fit
-    | ClearFit
-    | SetFix (NonEmpty Validation.WarningReason)
-    | ClearFix
-
-
-{-| DragState.Transition as used by this page.
--}
-type alias Transition =
-    DragState.Transition DragBeaconId DropBeaconId HoverBeaconId DragCache
-
-
-type alias DraggedItem =
-    DragState.DraggedItem DragBeaconId
+    | SelectedModalLifepath Int
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
-        GotDwarves (Ok lifepaths) ->
+        GotLifepaths (Ok allLifepaths) ->
+            ( { model | allLifepaths = Status.Loaded allLifepaths }, Cmd.none )
+
+        GotLifepaths (Err _) ->
+            ( { model | allLifepaths = Status.Failed }, Cmd.none )
+
+        EnteredName name ->
+            ( { model | name = name }, Cmd.none )
+
+        DnDMsg dndMsg ->
             let
-                all =
-                    Array.fromList lifepaths
-
-                sidebarLifepaths =
-                    Status.Loaded { all = all, sidebar = all }
+                ( dnd, lifepaths ) =
+                    system.update dndMsg model.dnd model.lifepaths
             in
-            ( { model | sidebarLifepaths = sidebarLifepaths }
-            , Cmd.none
+            ( { model | dnd = dnd, lifepaths = lifepaths }
+            , system.commands dnd
             )
 
-        GotDwarves (Err _) ->
-            ( { model | sidebarLifepaths = Status.Failed }
-            , Cmd.none
-            )
-
-        DragMsg (DragState.PickUp draggedItem) ->
-            case pickup model draggedItem of
-                Ok newModel ->
-                    ( newModel, Cmd.none )
-
-                Err err ->
-                    giveUp model "Error during pick up" err
-
-        DragMsg (DragState.Carry dragState) ->
-            ( { model | dragState = dragState }, Cmd.none )
-
-        DragMsg DragState.LetGo ->
-            ( letGo model, Cmd.none )
-
-        DragMsg DragState.Drop ->
-            case drop model of
-                Ok newModel ->
-                    ( newModel, Cmd.none )
-
-                Err err ->
-                    giveUp model "Error during drop" err
-
-        DragMsg (DragState.BeginHover hoverId) ->
-            ( { model | dragState = DragState.Hovered hoverId }
-            , Cmd.none
-            )
-
-        DragMsg DragState.EndHover ->
-            ( letGo model, Cmd.none )
-
-        DeleteBenchBlock benchIndex ->
-            ( { model | workbench = Workbench.deleteBlock model.workbench benchIndex }
-            , Cmd.none
-            )
-
-        SetFit fit ->
-            model.searchFilter
-                |> LifepathFilter.withFit (Just fit)
-                |> LifepathFilter.withSearchTerm ""
-                |> filterImmediately model
-
-        ClearFit ->
-            model.searchFilter
-                |> LifepathFilter.withFit Nothing
-                |> filterImmediately model
-
-        SetFix fix ->
-            model.searchFilter
-                |> LifepathFilter.withFix (Just fix)
-                |> LifepathFilter.withSearchTerm ""
-                |> filterImmediately model
-
-        ClearFix ->
-            model.searchFilter
-                |> LifepathFilter.withFix Nothing
-                |> filterImmediately model
-
-        EnteredSearchText input ->
+        RemoveLifepath index ->
             let
-                searchFilter =
-                    LifepathFilter.withSearchTerm input model.searchFilter
+                lifepaths =
+                    List.take index model.lifepaths
+                        ++ List.drop (index + 1) model.lifepaths
             in
-            ( { model | searchFilter = searchFilter }
-            , beginSearchDebounce input
-            )
+            ( { model | lifepaths = lifepaths }, Cmd.none )
 
-        SearchTimePassed searchTerm ->
-            ( searchTimePassed model searchTerm
-            , Cmd.none
-            )
-
-        DragMsg DragState.NoOp ->
-            ( model, Cmd.none )
-
-
-giveUp : Model -> String -> a -> ( Model, Cmd msg )
-giveUp model msg err =
-    ( letGo model, Cmd.none )
-
-
-letGo : Model -> Model
-letGo model =
-    { model | dragState = DragState.None }
-
-
-pickup : Model -> DragState.DraggedItem DragBeaconId -> Result InvalidModel Model
-pickup model draggedItem =
-    let
-        beginDragging : DragCache -> Model
-        beginDragging cache =
-            { model | dragState = DragState.Dragged ( draggedItem, cache ) }
-    in
-    pickupDragBeacon model draggedItem.beaconId
-        |> Result.map beginDragging
-
-
-pickupDragBeacon : Model -> DragBeaconId -> Result InvalidModel DragCache
-pickupDragBeacon { workbench, sidebarLifepaths } dragId =
-    case Beacon.dragLocation dragId of
-        Beacon.Bench location ->
-            Workbench.pickup workbench location
-                |> Result.mapError pickupError
-
-        Beacon.Sidebar sidebarIndex ->
-            case sidebarLifepaths of
-                Status.Loaded { sidebar } ->
-                    Array.get sidebarIndex sidebar
-                        |> Maybe.map (\path -> ( workbench, LifeBlock.singleton path ))
-                        |> Result.fromMaybe BoundsError
+        OpenModal ->
+            case model.allLifepaths of
+                Status.Loaded allLifepaths ->
+                    ( { model | modalState = Just <| defaultModal allLifepaths }, Cmd.none )
 
                 _ ->
-                    Err InvalidDragState
+                    ( model, Cmd.none )
 
+        SubmitModal Nothing ->
+            ( { model | modalState = Nothing }, Cmd.none )
 
-pickupError : Workbench.PickupError -> InvalidModel
-pickupError err =
-    case err of
-        Workbench.PickupBoundsError ->
-            BoundsError
+        SubmitModal (Just addedLifepath) ->
+            ( { model
+                | modalState = Nothing
+                , lifepaths = model.lifepaths ++ [ addedLifepath ]
+              }
+            , Cmd.none
+            )
 
-        Workbench.NoLifeBlock ->
-            InvalidDragState
+        SelectedModalLifepath index ->
+            updateModal
+                (\modalState ->
+                    ( { modalState | selectedLifepath = index }
+                    , Cmd.none
+                    )
+                )
+                model
 
+        SearchTimePassed searchText ->
+            updateModal
+                (\modalState ->
+                    ( searchTimePassed searchText modalState
+                    , Cmd.none
+                    )
+                )
+                model
 
-drop : Model -> Result InvalidModel Model
-drop model =
-    case model.dragState of
-        DragState.None ->
-            Err InvalidDragState
-
-        DragState.Hovered _ ->
-            Err InvalidDragState
-
-        DragState.Dragged _ ->
-            Ok <| letGo model
-
-        DragState.Poised ( hoverState, ( cachedBench, cachedBlock ) ) ->
-            let
-                dropLocation : Beacon.DropBeaconLocation
-                dropLocation =
-                    Beacon.dropLocation hoverState.hoveredDropBeacon
-            in
-            case Workbench.drop cachedBench cachedBlock dropLocation of
-                Err (Workbench.CombinationError _) ->
-                    Ok <| letGo model
-
-                Err Workbench.DropBoundsError ->
-                    Err BoundsError
-
-                Err Workbench.InvalidDropLocation ->
-                    Err InvalidDragState
-
-                Ok workbench ->
-                    Ok { model | workbench = workbench, dragState = DragState.None }
-
-
-filterImmediately : Model -> LifepathFilter -> ( Model, Cmd msg )
-filterImmediately model filter =
-    ( filterLifepaths { model | searchFilter = filter }, Cmd.none )
-
-
-searchTimePassed : Model -> String -> Model
-searchTimePassed model oldInput =
-    if model.searchFilter.searchTerm == oldInput then
-        filterLifepaths model
-
-    else
-        model
-
-
-filterLifepaths : Model -> Model
-filterLifepaths model =
-    let
-        applyFilter : LoadedLifepaths -> LoadedLifepaths
-        applyFilter { all } =
-            { all = all
-            , sidebar = LifepathFilter.apply model.searchFilter all
-            }
-    in
-    { model | sidebarLifepaths = Status.map applyFilter model.sidebarLifepaths }
+        EnteredModalSearchText searchText ->
+            updateModal
+                (\modalState ->
+                    ( { modalState | searchText = searchText }
+                    , beginSearchDebounce searchText
+                    )
+                )
+                model
 
 
 beginSearchDebounce : String -> Cmd Msg
-beginSearchDebounce input =
+beginSearchDebounce searchText =
     Process.sleep 250
-        |> Task.perform (\_ -> SearchTimePassed input)
+        |> Task.perform (\_ -> SearchTimePassed searchText)
+
+
+searchTimePassed : String -> ModalState -> ModalState
+searchTimePassed oldSearchText modalState =
+    if oldSearchText == modalState.searchText then
+        filterLifepaths oldSearchText modalState
+
+    else
+        modalState
+
+
+filterLifepaths : String -> ModalState -> ModalState
+filterLifepaths searchText modalState =
+    let
+        filteredPaths =
+            List.filter
+                (\lp ->
+                    List.any (\field -> String.contains searchText field) lp.searchContent
+                )
+                modalState.allLifepaths
+    in
+    { modalState
+        | selectedLifepath = 0
+        , searchText = searchText
+        , filteredPaths = filteredPaths
+    }
+
+
+updateModal : (ModalState -> ( ModalState, Cmd Msg )) -> Model -> ( Model, Cmd Msg )
+updateModal fn model =
+    case model.modalState of
+        Nothing ->
+            ( model, Cmd.none )
+
+        Just state ->
+            let
+                ( newState, cmd ) =
+                    fn state
+            in
+            ( { model | modalState = Just newState }, cmd )
 
 
 save : Model -> Shared.Model -> Shared.Model
 save model shared =
-    shared
+    case model.modalState of
+        Just _ ->
+            { shared | modalOpen = True }
+
+        Nothing ->
+            { shared | modalOpen = False }
 
 
 load : Shared.Model -> Model -> ( Model, Cmd Msg )
 load shared model =
-    ( model, Cmd.none )
+    if shared.modalOpen then
+        ( model, Cmd.none )
+
+    else
+        ( { model | modalState = Nothing }, Cmd.none )
 
 
 subscriptions : Model -> Sub Msg
 subscriptions model =
-    model.dragState
-        |> DragState.subscriptions Beacon.decoders
-        |> Sub.map DragMsg
+    system.subscriptions model.dnd
 
 
 
@@ -357,143 +268,301 @@ subscriptions model =
 
 view : Model -> Document Msg
 view model =
-    { title = "Lifepaths"
-    , body = [ viewPageContent model ]
+    { title = "Charred Knockoff"
+    , modal = Maybe.map viewModal model.modalState
+    , body =
+        [ heading "Character"
+        , row [ padding 20, spacing 20 ]
+            [ Input.text []
+                { onChange = EnteredName
+                , text = model.name
+                , placeholder = Nothing
+                , label = Input.labelAbove [] <| text "Name:"
+                }
+            , text <| "Age: " ++ String.fromInt (calculateAge model.lifepaths)
+            ]
+        , heading "Lifepaths"
+        , viewCharacterLifepaths model
+        , el [ paddingEach { edges | right = 20, bottom = 20 }, alignRight ] <| faintButton "Add Lifepath" (Just OpenModal)
+        , ghostView model.dnd model.lifepaths
+        ]
     }
 
 
-viewPageContent : Model -> Element Msg
-viewPageContent model =
+calculateAge : List Lifepath -> Int
+calculateAge lifepaths =
     let
-        viewPage : { workbench : Element Msg, draggedBlock : Element Msg } -> Element Msg
-        viewPage { workbench, draggedBlock } =
-            row
-                ([ width fill
-                 , height fill
-                 , scrollbarY
-                 , spacing 40
-                 ]
-                    ++ Common.scrollbarsFix
-                )
-                [ viewSidebar model
-                , workbench
-                , draggedBlock
-                ]
+        years lp =
+            case lp.years of
+                Years.Count yrs ->
+                    yrs
 
-        viewBench : Workbench.Hover -> Element Msg
-        viewBench hover =
-            Workbench.view model.workbench
-                { hover = hover
-                , deleteBenchBlock = DeleteBenchBlock
-                , filterPressed = SetFit
-                , setFix = SetFix
-                }
+                Years.Range ( _, max ) ->
+                    max
     in
-    case model.dragState of
-        DragState.None ->
-            viewPage { workbench = viewBench Workbench.None, draggedBlock = none }
-
-        DragState.Hovered id ->
-            viewPage
-                { workbench = viewBench <| Workbench.Hovered <| Beacon.hoverLocation id
-                , draggedBlock = none
-                }
-
-        DragState.Dragged ( draggedItem, ( _, cachedBlock ) ) ->
-            viewPage
-                { workbench = viewBench <| Workbench.Dragged cachedBlock
-                , draggedBlock = viewDraggedBlock draggedItem cachedBlock Nothing
-                }
-
-        DragState.Poised ( { draggedItem, hoveredDropBeacon }, ( cachedBench, cachedBlock ) ) ->
-            let
-                dropAttempt : Result Workbench.DropError Workbench
-                dropAttempt =
-                    Workbench.drop cachedBench cachedBlock <|
-                        Beacon.dropLocation hoveredDropBeacon
-
-                sourceBenchIndex : Maybe Int
-                sourceBenchIndex =
-                    case Beacon.dragLocation draggedItem.beaconId of
-                        Beacon.Sidebar _ ->
-                            Nothing
-
-                        Beacon.Bench loc ->
-                            Just loc.benchIndex
-
-                hover : Maybe Bool -> Workbench.Hover
-                hover dropHighlight =
-                    Workbench.Poised
-                        { hoveringBlock = cachedBlock
-                        , dropLocation = Beacon.dropLocation hoveredDropBeacon
-                        , dropHighlight = dropHighlight
-                        , sourceBenchIndex = sourceBenchIndex
-                        }
-            in
-            case dropAttempt of
-                Ok _ ->
-                    viewPage
-                        { workbench = viewBench <| hover <| Just True
-                        , draggedBlock = viewDraggedBlock draggedItem cachedBlock Nothing
-                        }
-
-                Err (Workbench.CombinationError errs) ->
-                    viewPage
-                        { workbench = viewBench <| hover <| Just False
-                        , draggedBlock = viewDraggedBlock draggedItem cachedBlock <| Just errs
-                        }
-
-                Err _ ->
-                    viewPage
-                        { workbench = viewBench <| hover Nothing
-                        , draggedBlock = viewDraggedBlock draggedItem cachedBlock Nothing
-                        }
+    List.sum <| List.map years lifepaths
 
 
-viewDraggedBlock : DraggedItem -> LifeBlock -> Maybe (NonEmpty Validation.Error) -> Element Msg
-viewDraggedBlock { cursorOnScreen, cursorOnDraggable } draggedBlock errors =
-    Workbench.viewDraggedBlock draggedBlock
-        { top = cursorOnScreen.y - cursorOnDraggable.y
-        , left = cursorOnScreen.x - cursorOnDraggable.x
-        , errors = errors
+viewCharacterLifepaths : Model -> Element Msg
+viewCharacterLifepaths model =
+    el [ width fill, padding 20 ] <|
+        case model.lifepaths of
+            [] ->
+                none
+
+            lifepaths ->
+                el
+                    [ width fill
+                    , Border.width 1
+                    , Border.color Colors.faint
+                    , Border.rounded 8
+                    ]
+                <|
+                    column [ width fill ] <|
+                        List.indexedMap
+                            (\i lifepath ->
+                                viewDraggableLifepath
+                                    { dnd = model.dnd
+                                    , maybeIndex = Just i
+                                    , lifepath = lifepath
+                                    }
+                            )
+                            lifepaths
+
+
+faintButton : String -> Maybe Msg -> Element Msg
+faintButton label onPress =
+    Input.button
+        [ alignRight
+        , Background.color Colors.faint
+        , Border.rounded 8
+        , paddingXY 15 10
+        ]
+        { onPress = onPress
+        , label = text label
         }
 
 
-viewSidebar : Model -> Element Msg
-viewSidebar model =
+viewModal : ModalState -> Element Msg
+viewModal modalState =
     column
-        [ width <| px 350
-        , height fill
-        , scrollbarY
-        , Background.color Colors.darkened
-        , Font.color Colors.white
-        , spacing 20
+        [ width (fill |> minimum 600)
+        , height (fill |> maximum 700)
+        , Background.color Colors.white
+        , Border.rounded 8
         ]
-        [ LifepathFilter.view
-            { enteredSearchText = EnteredSearchText
-            , clearFit = ClearFit
-            , clearFix = ClearFix
-            }
-            model.searchFilter
-        , viewSidebarLifepaths model.sidebarLifepaths
+    <|
+        [ heading "Add Lifepath"
+        , column [ padding 40 ]
+            [ Input.text []
+                { onChange = EnteredModalSearchText
+                , text = modalState.searchText
+                , placeholder = Nothing
+                , label = Input.labelAbove [] <| text "Search"
+                }
+            ]
+        , column
+            [ height fill
+            , width fill
+            , Background.color Colors.white
+            , clip
+            , scrollbarY
+            ]
+          <|
+            List.indexedMap
+                (\i lp ->
+                    if i == modalState.selectedLifepath then
+                        el [ width fill, Background.color Colors.faint ] <|
+                            viewSearchResultLifepath lp ("search-result-lp-" ++ String.fromInt i)
+
+                    else
+                        el [ width fill, Events.onClick <| SelectedModalLifepath i ] <|
+                            viewSearchResultLifepath lp ("search-result-lp-" ++ String.fromInt i)
+                )
+                modalState.filteredPaths
+        , row [ width fill, height fill, Background.color Colors.white, spacing 20, padding 20 ] <|
+            [ faintButton "Cancel" <| Just (SubmitModal Nothing)
+            , faintButton "Add" <|
+                Just (List.drop modalState.selectedLifepath modalState.filteredPaths |> List.head |> SubmitModal)
+            ]
         ]
 
 
-viewSidebarLifepaths : Status LoadedLifepaths -> Element Msg
-viewSidebarLifepaths sidebarLifepaths =
+ghostView : DnDList.Model -> List Lifepath -> Element Msg
+ghostView dnd lifepaths =
     let
-        viewPath : Int -> Lifepath -> Element Msg
-        viewPath index =
-            Lifepath.view <| Just <| Beacon.Sidebar index
+        maybePath =
+            system.info dnd
+                |> Maybe.andThen
+                    (\{ dragIndex } ->
+                        lifepaths |> List.drop dragIndex |> List.head
+                    )
     in
-    case sidebarLifepaths of
-        Status.Loading ->
-            text "loading..."
+    case maybePath of
+        Just path ->
+            el
+                (Background.color Colors.white
+                    :: Border.color Colors.faint
+                    :: Border.rounded 8
+                    :: (List.map htmlAttribute <| system.ghostStyles dnd)
+                )
+            <|
+                viewDraggableLifepath { dnd = dnd, maybeIndex = Nothing, lifepath = path }
 
-        Status.Failed ->
-            text "couldn't load lifepaths"
+        Nothing ->
+            none
 
-        Status.Loaded { sidebar } ->
-            column [ spacing 20, padding 20, width fill, height fill, scrollbarY ] <|
-                List.indexedMap viewPath <|
-                    Array.toList sidebar
+
+heading : String -> Element Msg
+heading h =
+    el
+        [ width fill
+        , centerX
+        , padding 20
+        , Background.color Colors.faint
+        ]
+    <|
+        text h
+
+
+{-| For non-ghost dnd list elements. Goes on the handle
+-}
+dndStyles : DnDList.Model -> Int -> List (Attribute Msg)
+dndStyles dnd index =
+    let
+        id =
+            dndId <| Just index
+    in
+    List.map htmlAttribute <|
+        case system.info dnd of
+            Just { dragIndex } ->
+                if dragIndex /= index then
+                    system.dropEvents index id
+
+                else
+                    []
+
+            Nothing ->
+                system.dragEvents index id
+
+
+dndId : Maybe Int -> String
+dndId maybeIndex =
+    case maybeIndex of
+        Just index ->
+            "lp-drag-" ++ String.fromInt index
+
+        Nothing ->
+            "lp-drag-ghost"
+
+
+type alias LifepathOptions =
+    { dnd : DnDList.Model
+    , maybeIndex : Maybe Int
+    , lifepath : Lifepath
+    }
+
+
+viewSearchResultLifepath : Lifepath -> String -> Element Msg
+viewSearchResultLifepath lifepath id =
+    viewInnerLifepath
+        { lifepath = lifepath
+        , dndStyles = []
+        , id = id
+        , removeBtnIndex = Nothing
+        }
+
+
+type alias InnerLifepathOptions =
+    { dndStyles : List (Attribute Msg)
+    , lifepath : Lifepath
+    , id : String
+    , removeBtnIndex : Maybe (Maybe Int)
+    }
+
+
+viewInnerLifepath : InnerLifepathOptions -> Element Msg
+viewInnerLifepath opts =
+    let
+        baseRowAttrs =
+            [ width fill
+            , spacing 10
+            , paddingXY 20 20
+            , htmlAttribute <| Html.Attributes.id opts.id
+            ]
+
+        rowAttrs =
+            baseRowAttrs ++ opts.dndStyles
+    in
+    row rowAttrs <|
+        [ column [ width fill, spacing 5 ] <|
+            [ row [ width fill ]
+                [ text <| toTitleCase opts.lifepath.name
+                , el [ Font.size 18, paddingEach { edges | left = 20 } ] <|
+                    (text <| "(" ++ toTitleCase opts.lifepath.settingName ++ ")")
+                ]
+            , textColumn [ width fill, Font.size 18 ]
+                [ row [ width fill, spacing 10, Font.size 18 ]
+                    [ text <| Years.toString opts.lifepath.years
+                    , text <| Resources.toString opts.lifepath.res
+                    , text <| StatMod.toString opts.lifepath.statMod
+                    ]
+                , paragraph [ width fill ] <|
+                    [ text "Leads: "
+                    , text <| String.join ", " <| List.map (.settingName >> toTitleCase) opts.lifepath.leads
+                    ]
+                , paragraph [] <|
+                    [ text <| "Skills: "
+                    , text <|
+                        String.fromInt opts.lifepath.skillPts
+                            ++ " pts: "
+                            ++ (String.join ", " <|
+                                    List.map (.displayName >> nonBreakingHyphens >> toTitleCase)
+                                        opts.lifepath.skills
+                               )
+                    , el [ alignLeft ] none
+                    ]
+                ]
+            ]
+        , case opts.removeBtnIndex of
+            Nothing ->
+                none
+
+            Just maybeIndex ->
+                el
+                    [ Border.rounded 2
+                    , Background.color Colors.faint
+                    , alignRight
+                    , alignTop
+                    , padding 5
+                    ]
+                    (Input.button
+                        [ centerX, centerY ]
+                        { onPress = Maybe.map RemoveLifepath maybeIndex
+                        , label = el [ centerX, centerY, Font.size 12 ] <| text "remove"
+                        }
+                    )
+        ]
+
+
+viewDraggableLifepath : LifepathOptions -> Element Msg
+viewDraggableLifepath { dnd, maybeIndex, lifepath } =
+    viewInnerLifepath
+        { dndStyles =
+            Maybe.map (dndStyles dnd) maybeIndex
+                |> Maybe.withDefault []
+        , lifepath = lifepath
+        , id = dndId maybeIndex
+        , removeBtnIndex = Just maybeIndex
+        }
+
+
+nonBreakingHyphens : String -> String
+nonBreakingHyphens =
+    String.map <|
+        \c ->
+            if c == '-' then
+                Char.fromCode 8209
+
+            else
+                c

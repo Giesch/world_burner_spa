@@ -1,7 +1,7 @@
-module Model.Trait exposing
+module Model.Lifepath.Trait exposing
     ( Trait
     , TraitType
-    , decoder
+    , decode
     , kind
     , name
     )
@@ -51,8 +51,8 @@ kind trait =
 -- DECODING
 
 
-decoder : Decoder Trait
-decoder =
+decode : Decoder Trait
+decode =
     Decode.field "kind" Decode.string
         |> Decode.andThen traitKindDecoder
 

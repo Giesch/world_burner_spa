@@ -1,4 +1,4 @@
-module Common.NonZero exposing
+module Model.NonZero exposing
     ( NonZero
     , decode
     , fromInt

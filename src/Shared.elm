@@ -12,6 +12,8 @@ import Browser.Navigation exposing (Key)
 import Colors
 import Element exposing (..)
 import Element.Background as Background
+import Element.Border as Border
+import Element.Events as Events
 import Element.Font as Font
 import Html.Attributes
 import Spa.Document exposing (Document)
@@ -30,12 +32,13 @@ type alias Flags =
 type alias Model =
     { url : Url
     , key : Key
+    , modalOpen : Bool
     }
 
 
 init : Flags -> Url -> Key -> ( Model, Cmd Msg )
 init flags url key =
-    ( Model url key
+    ( Model url key False
     , Cmd.none
     )
 
@@ -45,14 +48,14 @@ init flags url key =
 
 
 type Msg
-    = ReplaceMe
+    = CloseModal
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
-        ReplaceMe ->
-            ( model, Cmd.none )
+        CloseModal ->
+            ( { model | modalOpen = False }, Cmd.none )
 
 
 subscriptions : Model -> Sub Msg
@@ -70,27 +73,69 @@ view :
     -> Document msg
 view { page, toMsg } model =
     { title = page.title
+    , modal = Maybe.map (viewModal toMsg) page.modal
     , body =
         let
             routeLink route label =
-                link [ Font.color Colors.white, Font.underline ]
+                link [ Font.color Colors.black, Font.underline ]
                     { url = Route.toString route, label = text label }
         in
         [ column
-            [ height fill, width fill, scrollbarY ]
+            [ height fill, width fill ]
             [ row
                 [ padding 20
                 , spacing 20
                 , height (fill |> maximum 60)
                 , width fill
-                , Background.color Colors.darkened
+                , Background.color Colors.faint
                 ]
                 [ routeLink Route.Top "Homepage"
                 , routeLink Route.Create "Create"
-                , routeLink Route.CreateTwo "Create Two"
                 , routeLink Route.NotFound "Not Found"
                 ]
-            , column [ height fill, width fill, scrollbarY ] page.body
+            , row
+                [ height fill, width fill, paddingXY 100 50 ]
+                [ column
+                    [ height fill
+                    , width fill
+                    , Border.width 1
+                    , Border.rounded 8
+                    , Border.color Colors.faint
+                    ]
+                    page.body
+                ]
             ]
         ]
     }
+
+
+viewModal : (Msg -> msg) -> Element msg -> Element msg
+viewModal toMsg content =
+    column [ width fill, height fill ]
+        [ el
+            ([ height <| px 100
+             , width fill
+             ]
+                ++ backdrop toMsg
+            )
+            none
+        , row [ width fill ]
+            [ el ([ height fill, width fill ] ++ backdrop toMsg) none
+            , content
+            , el ([ height fill, width fill ] ++ backdrop toMsg) none
+            ]
+        , el
+            ([ height (fill |> minimum 100)
+             , width fill
+             ]
+                ++ backdrop toMsg
+            )
+            none
+        ]
+
+
+backdrop : (Msg -> msg) -> List (Attribute msg)
+backdrop toMsg =
+    [ Background.color Colors.darkened
+    , Events.onClick (toMsg CloseModal)
+    ]

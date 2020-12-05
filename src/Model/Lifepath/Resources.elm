@@ -1,4 +1,4 @@
-module Model.Lifepath.Resources exposing (Resources, decoder, toString)
+module Model.Lifepath.Resources exposing (Resources(..), decoder, toString)
 
 import Json.Decode as Decode exposing (Decoder)
 

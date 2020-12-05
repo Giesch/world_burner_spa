@@ -32,5 +32,6 @@ page =
 view : Url Params -> Document Msg
 view { params } =
     { title = "Homepage"
+    , modal = Nothing
     , body = [ text "Homepage" ]
     }

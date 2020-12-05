@@ -1,7 +1,7 @@
 module Model.Lifepath.StatMod exposing (StatMod, decoder, toString)
 
-import Common.NonZero as NonZero exposing (NonZero)
 import Json.Decode as Decode exposing (Decoder)
+import Model.NonZero as NonZero exposing (NonZero)
 
 
 type StatMod

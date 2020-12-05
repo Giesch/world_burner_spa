@@ -1,6 +1,5 @@
 module Model.Lifepath exposing
     ( Lifepath
-    , LifepathSkill
     , decoder
     , lifepathWidth
     , view
@@ -8,7 +7,6 @@ module Model.Lifepath exposing
 
 import Colors exposing (..)
 import Common
-import DnD.Beacon as Beacon
 import Element exposing (..)
 import Element.Background as Background
 import Element.Border as Border
@@ -19,9 +17,10 @@ import Model.Lifepath.GenSkills as GenSkills exposing (GenSkills)
 import Model.Lifepath.Lead as Lead exposing (Lead)
 import Model.Lifepath.Requirement as Requirement exposing (Requirement)
 import Model.Lifepath.Resources as Resources exposing (Resources)
+import Model.Lifepath.Skill as Skill exposing (Skill)
 import Model.Lifepath.StatMod as StatMod exposing (StatMod)
+import Model.Lifepath.Trait as Trait exposing (Trait)
 import Model.Lifepath.Years as Years exposing (Years)
-import Model.Trait as Trait exposing (Trait)
 import String.Extra exposing (toTitleCase)
 
 
@@ -38,7 +37,7 @@ type alias Lifepath =
     , genSkills : GenSkills
     , skillPts : Int
     , traitPts : Int
-    , skills : List LifepathSkill
+    , skills : List Skill
     , traits : List Trait
     , born : Bool
     , requirement : Maybe Requirement
@@ -59,24 +58,11 @@ type alias LifepathJson =
     , genSkills : GenSkills
     , skillPts : Int
     , traitPts : Int
-    , skills : List LifepathSkill
+    , skills : List Skill
     , traits : List Trait
     , born : Bool
     , requirement : Maybe Requirement
     }
-
-
-type alias LifepathSkill =
-    { skillId : Int
-    , displayName : String
-    , magical : Bool
-    , training : Bool
-    }
-
-
-type LifepathTrait
-    = Entry Int
-    | Entryless String
 
 
 
@@ -98,8 +84,8 @@ decoder =
         |> required "genSkills" GenSkills.decoder
         |> required "skillPts" Decode.int
         |> required "traitPts" Decode.int
-        |> required "skillList" (Decode.list lifepathSkillDecoder)
-        |> required "traitList" (Decode.list Trait.decoder)
+        |> required "skillList" (Decode.list Skill.decode)
+        |> required "traitList" (Decode.list Trait.decode)
         |> required "born" Decode.bool
         |> optional "requirement" (Decode.map Just Requirement.decoder) Nothing
         |> Decode.map addSearchContent
@@ -132,43 +118,13 @@ searchContent json =
     let
         skills : List String
         skills =
-            -- List.map .displayName json.skills
-            []
+            List.map .displayName json.skills
 
         traits : List String
         traits =
-            -- List.map Trait.name json.traits
-            []
+            List.map Trait.name json.traits
     in
     json.name :: json.settingName :: skills ++ traits
-
-
-lifepathSkillDecoder : Decoder LifepathSkill
-lifepathSkillDecoder =
-    Decode.succeed LifepathSkill
-        |> required "skillId" Decode.int
-        |> required "displayName" Decode.string
-        |> required "magical" Decode.bool
-        |> required "training" Decode.bool
-
-
-lifepathTraitDecoder : Decoder LifepathTrait
-lifepathTraitDecoder =
-    Decode.field "kind" Decode.string
-        |> Decode.andThen traitKindsDecoder
-
-
-traitKindsDecoder : String -> Decoder LifepathTrait
-traitKindsDecoder kind =
-    case kind of
-        "entry" ->
-            Decode.map Entry (Decode.field "value" Decode.int)
-
-        "entryless" ->
-            Decode.map Entryless (Decode.field "value" Decode.string)
-
-        k ->
-            Decode.fail <| "Invalid lifepath trait kind: " ++ k
 
 
 
@@ -180,8 +136,8 @@ lifepathWidth =
     Element.px 300
 
 
-view : Maybe Beacon.DragBeaconLocation -> Lifepath -> Element msg
-view beaconLocation lifepath =
+view : Lifepath -> Element msg
+view lifepath =
     let
         defaultAttrs : List (Attribute msg)
         defaultAttrs =
@@ -197,12 +153,7 @@ view beaconLocation lifepath =
                 ++ Common.userSelectNone
 
         attrs =
-            case beaconLocation of
-                Just location ->
-                    Beacon.dragBeacon location :: defaultAttrs
-
-                Nothing ->
-                    defaultAttrs
+            defaultAttrs
     in
     column attrs
         [ text <| toTitleCase lifepath.name ++ " (" ++ toTitleCase lifepath.settingName ++ ")"
@@ -217,7 +168,7 @@ view beaconLocation lifepath =
         ]
 
 
-viewSkills : Int -> List LifepathSkill -> Element msg
+viewSkills : Int -> List Skill -> Element msg
 viewSkills pts skills =
     let
         skillNames =
