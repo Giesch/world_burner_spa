@@ -7,6 +7,7 @@ module Colors exposing
     , faint
     , red
     , successGlow
+    , transparent
     , white
     )
 
@@ -64,6 +65,11 @@ darkened =
 faint : Color
 faint =
     rgba255 0 0 0 0.1
+
+
+transparent : Color
+transparent =
+    rgba255 0 0 0 0.0
 
 
 successGlow : Attribute msg

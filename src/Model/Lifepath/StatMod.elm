@@ -1,14 +1,47 @@
-module Model.Lifepath.StatMod exposing (StatMod(..), decoder)
+module Model.Lifepath.StatMod exposing (StatMod, decoder, toString)
 
 import Json.Decode as Decode exposing (Decoder)
+import Model.NonZero as NonZero exposing (NonZero)
 
 
 type StatMod
-    = Physical Int
-    | Mental Int
-    | Either Int
-    | Both Int
-    | NoMod
+    = Physical NonZero
+    | Mental NonZero
+    | Either NonZero
+    | Both NonZero
+    | None
+
+
+toString : StatMod -> String
+toString statMod =
+    case statMod of
+        None ->
+            "stat: --"
+
+        Physical val ->
+            "stat: " ++ viewVal val ++ "P"
+
+        Mental val ->
+            "stat: " ++ viewVal val ++ "M"
+
+        Either val ->
+            "stat: " ++ viewVal val ++ "M/P"
+
+        Both val ->
+            "stat: " ++ viewVal val ++ "M,P"
+
+
+viewVal : NonZero -> String
+viewVal val =
+    let
+        v =
+            NonZero.toInt val
+    in
+    if v > 0 then
+        "+" ++ String.fromInt v
+
+    else
+        "-" ++ String.fromInt v
 
 
 decoder : Decoder StatMod
@@ -33,12 +66,12 @@ statModKindsDecoder kind =
             modVariantDecoder Both
 
         "none" ->
-            Decode.succeed NoMod
+            Decode.succeed None
 
-        k ->
-            Decode.fail <| "Invalid stat mod kind: " ++ k
+        _ ->
+            Decode.fail <| "Invalid stat mod kind: " ++ kind
 
 
-modVariantDecoder : (Int -> StatMod) -> Decoder StatMod
+modVariantDecoder : (NonZero -> StatMod) -> Decoder StatMod
 modVariantDecoder variant =
-    Decode.map variant (Decode.field "value" Decode.int)
+    Decode.map variant (Decode.field "value" NonZero.decode)

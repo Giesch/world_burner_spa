@@ -1,5 +1,6 @@
 module Common exposing
     ( SplitResult
+    , edges
     , isOk
     , keepIf
     , minimumBy
@@ -13,6 +14,11 @@ import Element
 import Html.Attributes
 import Json.Decode as Decode exposing (Decoder)
 import List.NonEmpty as NonEmpty exposing (NonEmpty)
+
+
+edges : { left : Int, right : Int, top : Int, bottom : Int }
+edges =
+    { left = 0, right = 0, top = 0, bottom = 0 }
 
 
 isOk : Result x a -> Bool

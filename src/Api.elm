@@ -1,7 +1,7 @@
 module Api exposing
     ( LifepathsResponse
-    , dwarves
     , healthCheck
+    , lifepaths
     , lifepathsDecoder
     )
 
@@ -9,11 +9,10 @@ import Http
 import Json.Decode as Decode exposing (Decoder)
 import Json.Decode.Pipeline exposing (required)
 import Model.Lifepath as Lifepath exposing (Lifepath)
-import Model.Skill as Skill exposing (Skill)
 
 
-dwarves : (Result Http.Error (List Lifepath) -> msg) -> Cmd msg
-dwarves toMsg =
+lifepaths : (Result Http.Error (List Lifepath) -> msg) -> Cmd msg
+lifepaths toMsg =
     Http.get
         { url = "/api/lifepaths"
         , expect = Http.expectJson toMsg lifepathsDecoder
@@ -28,8 +27,7 @@ lifepathsDecoder =
 
 
 type alias LifepathsResponse =
-    { lifepaths : List Lifepath
-    }
+    { lifepaths : List Lifepath }
 
 
 healthCheck : (Result Http.Error () -> msg) -> Cmd msg
