@@ -1,6 +1,8 @@
 module Pages.Create exposing (Model, Msg, Params, page)
 
 import Api
+import Browser.Dom
+import Browser.Events
 import Colors
 import Common exposing (edges)
 import DnDList
@@ -12,6 +14,7 @@ import Element.Font as Font
 import Element.Input as Input
 import Html.Attributes
 import Http
+import Json.Decode as Decode
 import Model.Lifepath as Lifepath exposing (Lifepath)
 import Model.Lifepath.GenSkills as GenSkills exposing (GenSkills)
 import Model.Lifepath.Resources as Resources exposing (Resources)
@@ -114,11 +117,16 @@ type Msg
     | EnteredModalSearchText String
     | SearchTimePassed String
     | SelectedModalLifepath Int
+    | ArrowPress Direction
+    | NoOp
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
+        NoOp ->
+            ( model, Cmd.none )
+
         GotLifepaths (Ok allLifepaths) ->
             ( { model | allLifepaths = Status.Loaded allLifepaths }, Cmd.none )
 
@@ -148,7 +156,9 @@ update msg model =
         OpenModal ->
             case model.allLifepaths of
                 Status.Loaded allLifepaths ->
-                    ( { model | modalState = Just <| defaultModal allLifepaths }, Cmd.none )
+                    ( { model | modalState = Just <| defaultModal allLifepaths }
+                    , Task.attempt (\_ -> NoOp) <| Browser.Dom.focus modalSearchId
+                    )
 
                 _ ->
                     ( model, Cmd.none )
@@ -190,6 +200,34 @@ update msg model =
                     )
                 )
                 model
+
+        ArrowPress direction ->
+            updateModal (handleArrow direction) model
+
+
+handleArrow : Direction -> ModalState -> ( ModalState, Cmd Msg )
+handleArrow direction modalState =
+    case direction of
+        Up ->
+            let
+                selectedLifepath =
+                    modalState.selectedLifepath - 1
+            in
+            ( { modalState | selectedLifepath = max selectedLifepath 0 }
+            , Cmd.none
+            )
+
+        Down ->
+            let
+                selectedLifepath =
+                    modalState.selectedLifepath + 1
+            in
+            ( { modalState | selectedLifepath = min selectedLifepath <| List.length modalState.filteredPaths }
+            , Cmd.none
+            )
+
+        Other ->
+            ( modalState, Cmd.none )
 
 
 beginSearchDebounce : String -> Cmd Msg
@@ -259,7 +297,35 @@ load shared model =
 
 subscriptions : Model -> Sub Msg
 subscriptions model =
-    system.subscriptions model.dnd
+    Sub.batch
+        [ system.subscriptions model.dnd
+        , Browser.Events.onKeyUp keyDecoder
+            |> Sub.map ArrowPress
+        ]
+
+
+type Direction
+    = Up
+    | Down
+    | Other
+
+
+keyDecoder : Decode.Decoder Direction
+keyDecoder =
+    Decode.map toDirection (Decode.field "key" Decode.string)
+
+
+toDirection : String -> Direction
+toDirection string =
+    case string of
+        "ArrowUp" ->
+            Up
+
+        "ArrowDown" ->
+            Down
+
+        _ ->
+            Other
 
 
 
@@ -343,8 +409,18 @@ faintButton label onPress =
         }
 
 
+modalSearchId : String
+modalSearchId =
+    "lifepath-search"
+
+
 viewModal : ModalState -> Element Msg
 viewModal modalState =
+    let
+        selectedLifepath =
+            List.drop modalState.selectedLifepath modalState.filteredPaths
+                |> List.head
+    in
     column
         [ width (fill |> minimum 600)
         , height (fill |> maximum 700)
@@ -354,7 +430,10 @@ viewModal modalState =
     <|
         [ heading "Add Lifepath"
         , column [ padding 40 ]
-            [ Input.text []
+            [ Input.text
+                [ htmlAttribute <| Html.Attributes.id modalSearchId
+                , Common.onEnter <| SubmitModal selectedLifepath
+                ]
                 { onChange = EnteredModalSearchText
                 , text = modalState.searchText
                 , placeholder = Nothing
@@ -382,8 +461,7 @@ viewModal modalState =
                 modalState.filteredPaths
         , row [ width fill, height fill, Background.color Colors.white, spacing 20, padding 20 ] <|
             [ faintButton "Cancel" <| Just (SubmitModal Nothing)
-            , faintButton "Add" <|
-                Just (List.drop modalState.selectedLifepath modalState.filteredPaths |> List.head |> SubmitModal)
+            , faintButton "Add" <| Just (SubmitModal selectedLifepath)
             ]
         ]
 
