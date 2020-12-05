@@ -26,13 +26,16 @@ map fn doc =
 toBrowserDocument : Document msg -> Browser.Document msg
 toBrowserDocument doc =
     let
+        baseAttrs =
+            [ width fill, height fill ]
+
         layoutAttributes =
             case doc.modal of
                 Just modalView ->
-                    [ width fill, height fill, inFront modalView ]
+                    inFront modalView :: baseAttrs
 
                 Nothing ->
-                    [ width fill, height fill ]
+                    baseAttrs
     in
     { title = doc.title
     , body =

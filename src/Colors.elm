@@ -2,9 +2,11 @@ module Colors exposing
     ( black
     , blue
     , darkened
+    , darkenedHtml
     , disabledRed
     , failureGlow
     , faint
+    , faintHtml
     , red
     , successGlow
     , transparent
@@ -13,6 +15,8 @@ module Colors exposing
 
 import Element exposing (Attribute, Color, fromRgb255, rgb255, rgba255)
 import Element.Border as Border
+import Html
+import Html.Attributes
 
 
 type alias Rgb255 =
@@ -62,9 +66,19 @@ darkened =
     rgba255 0 0 0 0.8
 
 
+darkenedHtml : Html.Attribute msg
+darkenedHtml =
+    Html.Attributes.style "color" "rgba(0,0,0,0.8)"
+
+
 faint : Color
 faint =
     rgba255 0 0 0 0.1
+
+
+faintHtml : Html.Attribute msg
+faintHtml =
+    Html.Attributes.style "color" "rgba(0,0,0,0.1)"
 
 
 transparent : Color

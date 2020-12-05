@@ -118,7 +118,17 @@ viewModal toMsg content =
             none
         , row [ width fill ]
             [ el ([ height fill, width fill ] ++ backdrop toMsg) none
-            , content
+            , el
+                [ width fill
+                , height fill
+                , Border.shadow
+                    { offset = ( 5, 5 )
+                    , blur = 6
+                    , size = 0
+                    , color = rgba 0 0 0 0.9
+                    }
+                ]
+                content
             , el ([ height fill, width fill ] ++ backdrop toMsg) none
             ]
         , el

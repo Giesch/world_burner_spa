@@ -5,6 +5,7 @@ import Browser.Dom
 import Browser.Events
 import Colors
 import Common exposing (edges)
+import Components
 import DnDList
 import Element exposing (..)
 import Element.Background as Background
@@ -12,6 +13,9 @@ import Element.Border as Border
 import Element.Events as Events
 import Element.Font as Font
 import Element.Input as Input
+import FontAwesome.Icon as Icon
+import FontAwesome.Solid
+import Html
 import Html.Attributes
 import Http
 import Json.Decode as Decode
@@ -20,6 +24,7 @@ import Model.Lifepath.GenSkills as GenSkills exposing (GenSkills)
 import Model.Lifepath.Resources as Resources exposing (Resources)
 import Model.Lifepath.StatMod as StatMod exposing (StatMod)
 import Model.Lifepath.Trait as Trait exposing (Trait)
+import Model.Lifepath.Validation as Validation
 import Model.Lifepath.Years as Years exposing (Years)
 import Model.Status as Status exposing (Status)
 import Process
@@ -299,7 +304,7 @@ subscriptions : Model -> Sub Msg
 subscriptions model =
     Sub.batch
         [ system.subscriptions model.dnd
-        , Browser.Events.onKeyUp keyDecoder
+        , Browser.Events.onKeyDown keyDecoder
             |> Sub.map ArrowPress
         ]
 
@@ -386,14 +391,15 @@ viewCharacterLifepaths model =
                 <|
                     column [ width fill ] <|
                         List.indexedMap
-                            (\i lifepath ->
+                            (\i ( lifepath, warnings ) ->
                                 viewDraggableLifepath
                                     { dnd = model.dnd
                                     , maybeIndex = Just i
                                     , lifepath = lifepath
+                                    , warnings = warnings
                                     }
                             )
-                            lifepaths
+                            (Validation.validate lifepaths)
 
 
 faintButton : String -> Maybe Msg -> Element Msg
@@ -455,7 +461,7 @@ viewModal modalState =
                             viewSearchResultLifepath lp ("search-result-lp-" ++ String.fromInt i)
 
                     else
-                        el [ width fill, Events.onClick <| SelectedModalLifepath i ] <|
+                        el [ width fill, Events.onMouseDown <| SelectedModalLifepath i ] <|
                             viewSearchResultLifepath lp ("search-result-lp-" ++ String.fromInt i)
                 )
                 modalState.filteredPaths
@@ -482,10 +488,11 @@ ghostView dnd lifepaths =
                 (Background.color Colors.white
                     :: Border.color Colors.faint
                     :: Border.rounded 8
+                    :: Border.widthXY 0 1
                     :: (List.map htmlAttribute <| system.ghostStyles dnd)
                 )
             <|
-                viewDraggableLifepath { dnd = dnd, maybeIndex = Nothing, lifepath = path }
+                viewDraggableLifepath { dnd = dnd, maybeIndex = Nothing, lifepath = path, warnings = [] }
 
         Nothing ->
             none
@@ -538,6 +545,7 @@ type alias LifepathOptions =
     { dnd : DnDList.Model
     , maybeIndex : Maybe Int
     , lifepath : Lifepath
+    , warnings : List String
     }
 
 
@@ -548,6 +556,7 @@ viewSearchResultLifepath lifepath id =
         , dndStyles = []
         , id = id
         , removeBtnIndex = Nothing
+        , warnings = []
         }
 
 
@@ -556,6 +565,7 @@ type alias InnerLifepathOptions =
     , lifepath : Lifepath
     , id : String
     , removeBtnIndex : Maybe (Maybe Int)
+    , warnings : List String
     }
 
 
@@ -602,29 +612,64 @@ viewInnerLifepath opts =
                     ]
                 ]
             ]
+        , warningIcon opts.warnings
         , case opts.removeBtnIndex of
             Nothing ->
                 none
 
             Just maybeIndex ->
-                el
-                    [ Border.rounded 2
-                    , Background.color Colors.faint
-                    , alignRight
-                    , alignTop
-                    , padding 5
-                    ]
-                    (Input.button
-                        [ centerX, centerY ]
-                        { onPress = Maybe.map RemoveLifepath maybeIndex
-                        , label = el [ centerX, centerY, Font.size 12 ] <| text "remove"
-                        }
-                    )
+                Input.button
+                    [ alignRight, alignTop ]
+                    { onPress = Maybe.map RemoveLifepath maybeIndex
+                    , label = lifepathIcon FontAwesome.Solid.trash
+                    }
         ]
 
 
+warningIcon : List String -> Element msg
+warningIcon warnings =
+    let
+        tooltip : Attribute msg
+        tooltip =
+            Components.tooltip onLeft (warningsTooltip warnings)
+    in
+    el
+        [ alignRight
+        , alignTop
+        , tooltip
+        , transparent (List.isEmpty warnings)
+        ]
+    <|
+        lifepathIcon FontAwesome.Solid.exclamationTriangle
+
+
+lifepathIcon : Icon.Icon -> Element msg
+lifepathIcon icon =
+    el [ alignRight, alignTop, paddingEach { edges | right = 10 } ] <|
+        (html <| Icon.viewStyled [ Colors.darkenedHtml ] icon)
+
+
+warningsTooltip : List String -> Element msg
+warningsTooltip warnings =
+    el
+        [ Background.color Colors.white
+        , Font.color Colors.black
+        , padding 5
+        , Border.rounded 5
+        , Font.size 16
+        , Border.shadow
+            { offset = ( 0, 3 )
+            , blur = 6
+            , size = 0
+            , color = rgba 0 0 0 0.32
+            }
+        ]
+    <|
+        column [ padding 5, spacing 5 ] (List.map text warnings)
+
+
 viewDraggableLifepath : LifepathOptions -> Element Msg
-viewDraggableLifepath { dnd, maybeIndex, lifepath } =
+viewDraggableLifepath { dnd, maybeIndex, lifepath, warnings } =
     viewInnerLifepath
         { dndStyles =
             Maybe.map (dndStyles dnd) maybeIndex
@@ -632,6 +677,7 @@ viewDraggableLifepath { dnd, maybeIndex, lifepath } =
         , lifepath = lifepath
         , id = dndId maybeIndex
         , removeBtnIndex = Just maybeIndex
+        , warnings = warnings
         }
 
 
