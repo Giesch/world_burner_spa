@@ -152,6 +152,7 @@ type alias Poise =
     { hoveringBlock : LifeBlock
     , dropLocation : DropBeaconLocation
     , dropHighlight : Maybe Bool
+    , sourceBenchIndex : Maybe BenchIndex
     }
 
 
@@ -193,8 +194,8 @@ view (Workbench slots) opts =
                 Dragged _ ->
                     LifeBlock.Carry Nothing
 
-                Poised full ->
-                    convertHighlight benchIndex full
+                Poised poise ->
+                    convertHighlight benchIndex poise
 
                 None ->
                     LifeBlock.None
@@ -211,8 +212,28 @@ view (Workbench slots) opts =
 
         viewSlot : Int -> LifeBlock -> Element msg
         viewSlot benchIndex block =
-            block |> viewBlock benchIndex
+            viewBlock benchIndex block
 
+        -- case sourceBenchIndex of
+        --     Just source ->
+        --         -- NOTE this is to account for the picked-up slot missing
+        --         -- TODO this causes flickering
+        --         if source >= benchIndex then
+        --             viewBlock (benchIndex + 1) block
+        --         else
+        --             viewBlock benchIndex block
+        --     Nothing ->
+        --         viewBlock benchIndex block
+        sourceBenchIndex : Maybe Int
+        sourceBenchIndex =
+            case opts.hover of
+                Poised poise ->
+                    poise.sourceBenchIndex
+
+                _ ->
+                    Nothing
+
+        fullSlots : Array (Element msg)
         fullSlots =
             Array.indexedMap viewSlot slots
     in
@@ -270,8 +291,8 @@ openSlot position { hover } =
         beingHovered : Bool
         beingHovered =
             case hover of
-                Poised full ->
-                    full.dropLocation == Beacon.OpenSlot position
+                Poised { dropLocation } ->
+                    dropLocation == Beacon.OpenSlot position
 
                 _ ->
                     False
@@ -287,12 +308,8 @@ openSlot position { hover } =
                 Beacon.dropBeacon (Beacon.OpenSlot position)
                     :: Border.width 1
                     :: slotAttrs
-
-        content : Element msg
-        content =
-            el [ centerX, centerY ] <| text "+"
     in
-    el attrs content
+    el attrs <| el [ centerX, centerY ] <| text "+"
 
 
 type alias DraggedBlockOptions =

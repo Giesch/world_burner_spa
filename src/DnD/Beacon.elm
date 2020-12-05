@@ -31,7 +31,7 @@ import Json.Encode as Encode
 
 
 
--- TODO make this a Lifepaths submodule
+-- TODO make this module a Lifepaths submodule
 
 
 type alias BenchIndex =

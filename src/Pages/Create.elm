@@ -358,12 +358,12 @@ subscriptions model =
 view : Model -> Document Msg
 view model =
     { title = "Lifepaths"
-    , body = [ viewFullPage model ]
+    , body = [ viewPageContent model ]
     }
 
 
-viewFullPage : Model -> Element Msg
-viewFullPage model =
+viewPageContent : Model -> Element Msg
+viewPageContent model =
     let
         viewPage : { workbench : Element Msg, draggedBlock : Element Msg } -> Element Msg
         viewPage { workbench, draggedBlock } =
@@ -412,12 +412,22 @@ viewFullPage model =
                     Workbench.drop cachedBench cachedBlock <|
                         Beacon.dropLocation hoveredDropBeacon
 
+                sourceBenchIndex : Maybe Int
+                sourceBenchIndex =
+                    case Beacon.dragLocation draggedItem.beaconId of
+                        Beacon.Sidebar _ ->
+                            Nothing
+
+                        Beacon.Bench loc ->
+                            Just loc.benchIndex
+
                 hover : Maybe Bool -> Workbench.Hover
                 hover dropHighlight =
                     Workbench.Poised
                         { hoveringBlock = cachedBlock
                         , dropLocation = Beacon.dropLocation hoveredDropBeacon
                         , dropHighlight = dropHighlight
+                        , sourceBenchIndex = sourceBenchIndex
                         }
             in
             case dropAttempt of

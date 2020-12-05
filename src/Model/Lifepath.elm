@@ -209,7 +209,7 @@ view beaconLocation lifepath =
         , row [ width fill, spaceEvenly ]
             [ text <| Years.toString lifepath.years
             , text <| Resources.toString lifepath.res
-            , viewLifepathStat lifepath.statMod
+            , text <| StatMod.toString lifepath.statMod
             ]
         , viewSkills lifepath.skillPts lifepath.skills
         , viewTraits lifepath.traitPts lifepath.traits
@@ -234,52 +234,6 @@ viewSkills pts skills =
         _ ->
             paragraph []
                 [ text ("Skills: " ++ String.fromInt pts ++ ": " ++ skillNames) ]
-
-
-viewLifepathStat : StatMod -> Element msg
-viewLifepathStat statMod =
-    case statMod of
-        StatMod.NoMod ->
-            text <| "stat: --"
-
-        mod ->
-            -- TODO this is so gross
-            text <| "stat: " ++ viewStatMod mod
-
-
-viewStatMod : StatMod -> String
-viewStatMod statMod =
-    let
-        ( kind, value ) =
-            case statMod of
-                StatMod.Physical v ->
-                    ( "P", v )
-
-                StatMod.Mental v ->
-                    ( "M", v )
-
-                StatMod.Either v ->
-                    ( "M/P", v )
-
-                StatMod.Both v ->
-                    ( "M,P", v )
-
-                StatMod.NoMod ->
-                    ( "", 0 )
-
-        prefix =
-            -- zero is not a permitted value in the db
-            if value > 0 then
-                "+"
-
-            else
-                "-"
-    in
-    if String.length kind > 0 then
-        prefix ++ String.fromInt value ++ kind
-
-    else
-        ""
 
 
 viewLeads : List Lead -> Element msg

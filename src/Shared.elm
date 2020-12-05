@@ -87,6 +87,7 @@ view { page, toMsg } model =
                 ]
                 [ routeLink Route.Top "Homepage"
                 , routeLink Route.Create "Create"
+                , routeLink Route.CreateTwo "Create Two"
                 , routeLink Route.NotFound "Not Found"
                 ]
             , column [ height fill, width fill, scrollbarY ] page.body
