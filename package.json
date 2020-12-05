@@ -6,12 +6,13 @@
     "start": "npm install && npm run build:dev && npm run dev",
     "test": "elm-test",
     "test:watch": "elm-test --watch",
-    "build": "run-s build:elm-spa build:elm",
+    "build": "run-s build:elm-spa build:elm build:uglify",
     "build:dev": "run-s build:elm-spa build:dev:elm",
     "dev": "run-p dev:elm-spa dev:elm",
     "build:elm": "elm make src/Main.elm --optimize --output=public/dist/elm.compiled.js",
     "build:dev:elm": "elm make src/Main.elm --debug --output=public/dist/elm.compiled.js || true",
     "build:elm-spa": "elm-spa build .",
+    "build:uglify": "uglifyjs 'public/dist/elm.compiled.js' --compress 'pure_funcs=\"F2,F3,F4,F5,F6,F7,F8,F9,A2,A3,A4,A5,A6,A7,A8,A9\",pure_getters,keep_fargs=false,unsafe_comps,unsafe' | uglifyjs --mangle --output='public/dist/elm.compiled.js'",
     "dev:elm": "elm-live src/Main.elm --proxy-prefix=/api --proxy-host=http://localhost:3000 -u -d public -- --debug --output=public/dist/elm.compiled.js",
     "dev:elm-spa": "chokidar src/Pages -c \"elm-spa build .\""
   },
@@ -24,6 +25,7 @@
     "elm-live": "4.0.2",
     "elm-spa": "5.0.3",
     "elm-test": "0.19.1-revision2",
-    "npm-run-all": "4.1.5"
+    "npm-run-all": "4.1.5",
+    "uglify-js": "^2.8.29"
   }
 }
