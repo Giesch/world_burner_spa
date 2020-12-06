@@ -1,22 +1,33 @@
 module Model.Lifepath.Validation exposing
-    ( ValidatedLifepath
+    ( ValidPathList
+    , ValidatedLifepath
     , revalidate
+    , unpack
     , validate
     )
 
-import Model.Lifepath as Lifepath exposing (Lifepath)
+import Model.Lifepath exposing (Lifepath)
+
+
+type ValidPathList
+    = Validated (List ValidatedLifepath)
+
+
+unpack : ValidPathList -> List ValidatedLifepath
+unpack (Validated paths) =
+    paths
 
 
 type alias ValidatedLifepath =
     ( Lifepath, List String )
 
 
-revalidate : List ValidatedLifepath -> List ValidatedLifepath
+revalidate : List ValidatedLifepath -> ValidPathList
 revalidate validations =
     validate <| List.map Tuple.first validations
 
 
-validate : List Lifepath -> List ValidatedLifepath
+validate : List Lifepath -> ValidPathList
 validate lifepaths =
     let
         initialPairs : List ( Lifepath, List String )
@@ -27,6 +38,7 @@ validate lifepaths =
     initialPairs
         |> addMissingBornWarning
         |> addMisplacedBornWarning
+        |> Validated
 
 
 addMissingBornWarning : List ValidatedLifepath -> List ValidatedLifepath

@@ -16,7 +16,6 @@ import Element.Input as Input
 import FontAwesome.Icon as Icon
 import FontAwesome.Regular
 import FontAwesome.Solid
-import Html
 import Html.Attributes
 import Http
 import Json.Decode as Decode
@@ -25,7 +24,7 @@ import Model.Lifepath.GenSkills as GenSkills exposing (GenSkills)
 import Model.Lifepath.Resources as Resources exposing (Resources)
 import Model.Lifepath.StatMod as StatMod exposing (StatMod)
 import Model.Lifepath.Trait as Trait exposing (Trait)
-import Model.Lifepath.Validation as Validation
+import Model.Lifepath.Validation as Validation exposing (ValidPathList, ValidatedLifepath)
 import Model.Lifepath.Years as Years exposing (Years)
 import Model.Status as Status exposing (Status)
 import Process
@@ -60,7 +59,7 @@ type alias Params =
 type alias Model =
     { allLifepaths : Status (List Lifepath)
     , name : String
-    , characterLifepaths : List ( Lifepath, List String )
+    , characterLifepaths : ValidPathList
     , dnd : DnDList.Model
     , modalState : Maybe ModalState
     }
@@ -101,7 +100,7 @@ init : Shared.Model -> Url Params -> ( Model, Cmd Msg )
 init shared { params } =
     ( { allLifepaths = Status.Loading
       , name = ""
-      , characterLifepaths = []
+      , characterLifepaths = Validation.validate []
       , dnd = system.model
       , modalState = Nothing
       }
@@ -145,7 +144,7 @@ update msg model =
         DnDMsg dndMsg ->
             let
                 ( dnd, lifepaths ) =
-                    system.update dndMsg model.dnd model.characterLifepaths
+                    system.update dndMsg model.dnd <| Validation.unpack model.characterLifepaths
             in
             ( { model | dnd = dnd, characterLifepaths = Validation.revalidate lifepaths }
             , system.commands dnd
@@ -153,11 +152,14 @@ update msg model =
 
         RemoveLifepath index ->
             let
+                unpacked =
+                    Validation.unpack model.characterLifepaths
+
                 lifepaths =
-                    List.take index model.characterLifepaths
-                        ++ List.drop (index + 1) model.characterLifepaths
+                    List.take index unpacked
+                        ++ List.drop (index + 1) unpacked
             in
-            ( { model | characterLifepaths = lifepaths }, Cmd.none )
+            ( { model | characterLifepaths = Validation.revalidate lifepaths }, Cmd.none )
 
         OpenModal ->
             case model.allLifepaths of
@@ -176,7 +178,7 @@ update msg model =
             ( { model
                 | modalState = Nothing
                 , characterLifepaths =
-                    Validation.validate <| List.map Tuple.first model.characterLifepaths ++ [ addedLifepath ]
+                    Validation.validate <| List.map Tuple.first (Validation.unpack model.characterLifepaths) ++ [ addedLifepath ]
               }
             , Cmd.none
             )
@@ -341,6 +343,10 @@ toDirection string =
 
 view : Model -> Document Msg
 view model =
+    let
+        unpackedLifepaths =
+            Validation.unpack model.characterLifepaths
+    in
     { title = "Charred Knockoff"
     , modal = Maybe.map viewModal model.modalState
     , body =
@@ -352,12 +358,12 @@ view model =
                 , placeholder = Nothing
                 , label = Input.labelAbove [] <| text "Name:"
                 }
-            , text <| "Age: " ++ String.fromInt (calculateAge model.characterLifepaths)
+            , text <| "Age: " ++ String.fromInt (calculateAge unpackedLifepaths)
             ]
         , heading "Lifepaths"
         , viewCharacterLifepaths model
         , el [ paddingEach { edges | right = 20, bottom = 20 }, alignRight ] <| faintButton "Add Lifepath" (Just OpenModal)
-        , ghostView model.dnd model.characterLifepaths
+        , ghostView model.dnd unpackedLifepaths
         ]
     }
 
@@ -379,7 +385,7 @@ calculateAge lifepaths =
 viewCharacterLifepaths : Model -> Element Msg
 viewCharacterLifepaths model =
     el [ width fill, padding 20 ] <|
-        case model.characterLifepaths of
+        case Validation.unpack model.characterLifepaths of
             [] ->
                 none
 
