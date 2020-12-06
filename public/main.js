@@ -7,4 +7,3 @@ var app = Elm.Main.init({ flags: flags });
 
 // Ports go here
 // https://guide.elm-lang.org/interop/ports.html
-setupDraggable(app.ports.dragEvents.send);

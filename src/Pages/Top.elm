@@ -6,6 +6,7 @@ import Browser.Events
 import Colors
 import Common exposing (edges)
 import Components
+import Dict exposing (Dict)
 import DnDList
 import Element exposing (..)
 import Element.Background as Background
@@ -13,6 +14,7 @@ import Element.Border as Border
 import Element.Events as Events
 import Element.Font as Font
 import Element.Input as Input
+import ElmTextSearch
 import FontAwesome.Icon as Icon
 import FontAwesome.Regular
 import FontAwesome.Solid
@@ -59,7 +61,7 @@ type alias Params =
 
 
 type alias Model =
-    { allLifepaths : Status (List Lifepath)
+    { searchableLifepaths : Status SearchableLifepaths
     , name : String
     , characterLifepaths : ValidPathList
     , dnd : DnDList.Model
@@ -67,25 +69,38 @@ type alias Model =
     }
 
 
+type alias SearchableLifepaths =
+    { allLifepathsById : Dict String Lifepath
+    , searchIndex : ElmTextSearch.Index Lifepath
+    }
+
+
 type alias ModalState =
     { searchText : String
     , filteredPaths : List Lifepath
-    , allLifepaths : List Lifepath
+    , allLifepathsById : Dict String Lifepath
+    , searchIndex : ElmTextSearch.Index Lifepath
     , selectedLifepath : Int
     }
 
 
-defaultModal : List Lifepath -> ModalState
-defaultModal allLifepaths =
+defaultModal : SearchableLifepaths -> ModalState
+defaultModal searchableLifepaths =
     { searchText = ""
-    , filteredPaths = allLifepaths
-    , allLifepaths = allLifepaths
+    , filteredPaths = Dict.values searchableLifepaths.allLifepathsById
+    , allLifepathsById = searchableLifepaths.allLifepathsById
+    , searchIndex = searchableLifepaths.searchIndex
     , selectedLifepath = 0
     }
 
 
-config : DnDList.Config ValidatedLifepath
-config =
+system : DnDList.System ValidatedLifepath Msg
+system =
+    DnDList.create dndConfig DnDMsg
+
+
+dndConfig : DnDList.Config ValidatedLifepath
+dndConfig =
     { beforeUpdate = \_ _ list -> list
     , movement = DnDList.Free
     , listen = DnDList.OnDrag
@@ -93,14 +108,23 @@ config =
     }
 
 
-system : DnDList.System ValidatedLifepath Msg
-system =
-    DnDList.create config DnDMsg
+searchConfig : ElmTextSearch.SimpleConfig Lifepath
+searchConfig =
+    { ref = .id >> String.fromInt
+    , fields =
+        [ ( .name, 2.0 )
+        , ( .settingName, 0.5 )
+        ]
+    , listFields =
+        [ ( .skills >> List.map .displayName, 1.0 )
+        , ( .traits >> List.map Trait.name, 1.0 )
+        ]
+    }
 
 
 init : Shared.Model -> Url Params -> ( Model, Cmd Msg )
 init shared { params } =
-    ( { allLifepaths = Status.Loading
+    ( { searchableLifepaths = Status.Loading
       , name = ""
       , characterLifepaths = Validation.validate []
       , dnd = system.model
@@ -128,6 +152,20 @@ type Msg
     | NoOp
 
 
+buildSearchIndex : List Lifepath -> Result () (ElmTextSearch.Index Lifepath)
+buildSearchIndex lifepaths =
+    case ElmTextSearch.addDocs lifepaths <| ElmTextSearch.new searchConfig of
+        ( index, [] ) ->
+            Ok index
+
+        ( _, errors ) ->
+            let
+                _ =
+                    Debug.log "buildIndexErr" errors
+            in
+            Err ()
+
+
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
@@ -135,10 +173,29 @@ update msg model =
             ( model, Cmd.none )
 
         GotLifepaths (Ok allLifepaths) ->
-            ( { model | allLifepaths = Status.Loaded allLifepaths }, Cmd.none )
+            let
+                collectById : List Lifepath -> Dict String Lifepath
+                collectById =
+                    List.foldl
+                        (\lp dict -> Dict.insert (String.fromInt lp.id) lp dict)
+                        Dict.empty
+
+                searchableLifepaths : Status SearchableLifepaths
+                searchableLifepaths =
+                    case buildSearchIndex allLifepaths of
+                        Ok searchIndex ->
+                            Status.Loaded
+                                { allLifepathsById = collectById allLifepaths
+                                , searchIndex = searchIndex
+                                }
+
+                        Err _ ->
+                            Status.Failed
+            in
+            ( { model | searchableLifepaths = searchableLifepaths }, Cmd.none )
 
         GotLifepaths (Err _) ->
-            ( { model | allLifepaths = Status.Failed }, Cmd.none )
+            ( { model | searchableLifepaths = Status.Failed }, Cmd.none )
 
         EnteredName name ->
             ( { model | name = name }, Cmd.none )
@@ -164,9 +221,9 @@ update msg model =
             ( { model | characterLifepaths = Validation.revalidate lifepaths }, Cmd.none )
 
         OpenModal ->
-            case model.allLifepaths of
-                Status.Loaded allLifepaths ->
-                    ( { model | modalState = Just <| defaultModal allLifepaths }
+            case model.searchableLifepaths of
+                Status.Loaded searchableLifepaths ->
+                    ( { model | modalState = Just <| defaultModal searchableLifepaths }
                     , Task.attempt (\_ -> NoOp) <| Browser.Dom.focus modalSearchId
                     )
 
@@ -243,34 +300,38 @@ handleArrow direction modalState =
 
 beginSearchDebounce : String -> Cmd Msg
 beginSearchDebounce searchText =
-    Process.sleep 250
+    Process.sleep 100
         |> Task.perform (\_ -> SearchTimePassed searchText)
 
 
 searchTimePassed : String -> ModalState -> ModalState
 searchTimePassed oldSearchText modalState =
     if oldSearchText == modalState.searchText then
-        filterLifepaths oldSearchText modalState
+        searchLifepaths modalState
 
     else
         modalState
 
 
-filterLifepaths : String -> ModalState -> ModalState
-filterLifepaths searchText modalState =
+searchLifepaths : ModalState -> ModalState
+searchLifepaths modalState =
     let
-        filteredPaths =
-            List.filter
-                (\lp ->
-                    List.any (\field -> String.contains searchText field) lp.searchContent
-                )
-                modalState.allLifepaths
+        lookupHit : ( String, Float ) -> Maybe Lifepath
+        lookupHit ( id, _ ) =
+            Dict.get id modalState.allLifepathsById
     in
-    { modalState
-        | selectedLifepath = 0
-        , searchText = searchText
-        , filteredPaths = filteredPaths
-    }
+    case ElmTextSearch.search modalState.searchText modalState.searchIndex of
+        Err _ ->
+            -- NOTE the 3 possible errors all basically mean no hits for different reasons
+            -- https://package.elm-lang.org/packages/rluiten/elm-text-search/latest/ElmTextSearch
+            { modalState | filteredPaths = [] }
+
+        Ok ( newIndex, hitList ) ->
+            { modalState
+                | selectedLifepath = 0
+                , filteredPaths = List.filterMap lookupHit hitList
+                , searchIndex = newIndex
+            }
 
 
 updateModal : (ModalState -> ( ModalState, Cmd Msg )) -> Model -> ( Model, Cmd Msg )

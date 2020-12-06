@@ -121,6 +121,7 @@ viewModal toMsg content =
             , el
                 [ width fill
                 , height fill
+                , Border.rounded 8
                 , Border.shadow
                     { offset = ( 5, 5 )
                     , blur = 6

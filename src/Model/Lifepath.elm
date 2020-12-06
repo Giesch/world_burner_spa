@@ -34,27 +34,6 @@ type alias Lifepath =
     , traits : List Trait
     , born : Bool
     , requirement : Maybe Requirement
-    , searchContent : List String
-    }
-
-
-type alias LifepathJson =
-    { id : Int
-    , settingId : Int
-    , settingName : String
-    , name : String
-    , page : Int
-    , years : Years
-    , statMod : StatMod
-    , res : Resources
-    , leads : List Lead
-    , genSkills : GenSkills
-    , skillPts : Int
-    , traitPts : Int
-    , skills : List Skill
-    , traits : List Trait
-    , born : Bool
-    , requirement : Maybe Requirement
     }
 
 
@@ -64,7 +43,7 @@ type alias LifepathJson =
 
 decoder : Decoder Lifepath
 decoder =
-    Decode.succeed LifepathJson
+    Decode.succeed Lifepath
         |> required "id" Decode.int
         |> required "settingId" Decode.int
         |> required "settingName" Decode.string
@@ -81,40 +60,3 @@ decoder =
         |> required "traitList" (Decode.list Trait.decode)
         |> required "born" Decode.bool
         |> optional "requirement" (Decode.map Just Requirement.decoder) Nothing
-        |> Decode.map addSearchContent
-
-
-addSearchContent : LifepathJson -> Lifepath
-addSearchContent json =
-    { id = json.id
-    , settingId = json.settingId
-    , settingName = json.settingName
-    , name = json.name
-    , page = json.page
-    , years = json.years
-    , statMod = json.statMod
-    , res = json.res
-    , leads = json.leads
-    , genSkills = json.genSkills
-    , skillPts = json.skillPts
-    , traitPts = json.traitPts
-    , skills = json.skills
-    , traits = json.traits
-    , born = json.born
-    , requirement = json.requirement
-    , searchContent = searchContent json
-    }
-
-
-searchContent : LifepathJson -> List String
-searchContent json =
-    let
-        skills : List String
-        skills =
-            List.map .displayName json.skills
-
-        traits : List String
-        traits =
-            List.map Trait.name json.traits
-    in
-    json.name :: json.settingName :: skills ++ traits
