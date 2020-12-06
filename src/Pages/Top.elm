@@ -82,7 +82,7 @@ defaultModal allLifepaths =
     }
 
 
-config : DnDList.Config ( Lifepath, List String )
+config : DnDList.Config ValidatedLifepath
 config =
     { beforeUpdate = \_ _ list -> list
     , movement = DnDList.Free
@@ -91,7 +91,7 @@ config =
     }
 
 
-system : DnDList.System ( Lifepath, List String ) Msg
+system : DnDList.System ValidatedLifepath Msg
 system =
     DnDList.create config DnDMsg
 
@@ -178,7 +178,7 @@ update msg model =
             ( { model
                 | modalState = Nothing
                 , characterLifepaths =
-                    Validation.validate <| List.map Tuple.first (Validation.unpack model.characterLifepaths) ++ [ addedLifepath ]
+                    Validation.validate <| List.map .lifepath (Validation.unpack model.characterLifepaths) ++ [ addedLifepath ]
               }
             , Cmd.none
             )
@@ -379,7 +379,7 @@ calculateAge lifepaths =
                 Years.Range ( _, max ) ->
                     max
     in
-    List.sum <| List.map (Tuple.first >> years) lifepaths
+    List.sum <| List.map (.lifepath >> years) lifepaths
 
 
 viewCharacterLifepaths : Model -> Element Msg
@@ -399,7 +399,7 @@ viewCharacterLifepaths model =
                 <|
                     column [ width fill ] <|
                         List.indexedMap
-                            (\i ( lifepath, warnings ) ->
+                            (\i { lifepath, warnings } ->
                                 viewDraggableLifepath
                                     { dnd = model.dnd
                                     , maybeIndex = Just i
@@ -492,7 +492,7 @@ ghostView dnd lifepaths =
                     )
     in
     case maybePath of
-        Just ( index, ( path, warnings ) ) ->
+        Just ( index, { lifepath, warnings } ) ->
             el
                 (Background.color Colors.white
                     :: Border.color Colors.faint
@@ -504,7 +504,7 @@ ghostView dnd lifepaths =
                 viewDraggableLifepath
                     { dnd = dnd
                     , maybeIndex = Just index
-                    , lifepath = path
+                    , lifepath = lifepath
                     , warnings = warnings
                     }
 
