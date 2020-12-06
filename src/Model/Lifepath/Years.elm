@@ -1,4 +1,9 @@
-module Model.Lifepath.Years exposing (Years(..), decoder, toString)
+module Model.Lifepath.Years exposing
+    ( Years
+    , age
+    , decoder
+    , toString
+    )
 
 import Common
 import Json.Decode as Decode exposing (Decoder)
@@ -17,6 +22,20 @@ toString years =
 
         Range ( min, max ) ->
             String.fromInt min ++ "-" ++ String.fromInt max ++ " yrs"
+
+
+age : List Years -> Int
+age list =
+    let
+        toInt yrs =
+            case yrs of
+                Count count ->
+                    count
+
+                Range ( _, max ) ->
+                    max
+    in
+    List.sum <| List.map toInt list
 
 
 decoder : Decoder Years

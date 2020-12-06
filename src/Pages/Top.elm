@@ -358,7 +358,7 @@ view model =
                 , placeholder = Nothing
                 , label = Input.labelAbove [] <| text "Name:"
                 }
-            , text <| "Age: " ++ String.fromInt (calculateAge unpackedLifepaths)
+            , text <| "Age: " ++ String.fromInt (Years.age <| List.map (.lifepath >> .years) unpackedLifepaths)
             ]
         , heading "Lifepaths"
         , viewCharacterLifepaths model
@@ -366,20 +366,6 @@ view model =
         , ghostView model.dnd unpackedLifepaths
         ]
     }
-
-
-calculateAge : List Validation.ValidatedLifepath -> Int
-calculateAge lifepaths =
-    let
-        years lp =
-            case lp.years of
-                Years.Count yrs ->
-                    yrs
-
-                Years.Range ( _, max ) ->
-                    max
-    in
-    List.sum <| List.map (.lifepath >> years) lifepaths
 
 
 viewCharacterLifepaths : Model -> Element Msg
@@ -609,12 +595,11 @@ viewInnerLifepath opts =
                     , text <| Resources.toString opts.lifepath.res
                     , text <| StatMod.toString opts.lifepath.statMod
                     ]
-                , paragraph [ width fill ] <|
-                    [ text "Leads: "
-                    , text <| String.join ", " <| List.map (.settingName >> toTitleCase) opts.lifepath.leads
-                    ]
                 , paragraph [] <|
                     [ text <| "Skills: "
+                    , GenSkills.toString opts.lifepath.genSkills
+                        |> Maybe.map (\genText -> text (genText ++ ", "))
+                        |> Maybe.withDefault none
                     , text <|
                         String.fromInt opts.lifepath.skillPts
                             ++ " pts: "
@@ -622,7 +607,17 @@ viewInnerLifepath opts =
                                     List.map (.displayName >> nonBreakingHyphens >> toTitleCase)
                                         opts.lifepath.skills
                                )
-                    , el [ alignLeft ] none
+                    ]
+                , paragraph [] <|
+                    [ text <| "Traits: "
+                    , text <|
+                        String.fromInt opts.lifepath.traitPts
+                            ++ " pts: "
+                            ++ (String.join ", " <| List.map (Trait.name >> toTitleCase) opts.lifepath.traits)
+                    ]
+                , paragraph [ width fill ] <|
+                    [ text "Leads: "
+                    , text <| String.join ", " <| List.map (.settingName >> toTitleCase) opts.lifepath.leads
                     ]
                 , case opts.lifepath.requirement of
                     Nothing ->

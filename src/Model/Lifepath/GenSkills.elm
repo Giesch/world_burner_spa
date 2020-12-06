@@ -1,4 +1,8 @@
-module Model.Lifepath.GenSkills exposing (GenSkills(..), decoder)
+module Model.Lifepath.GenSkills exposing
+    ( GenSkills
+    , decoder
+    , toString
+    )
 
 import Json.Decode as Decode exposing (Decoder)
 
@@ -10,6 +14,22 @@ type GenSkills
 
 type GenSkillCalc
     = OnePerYear
+
+
+toString : GenSkills -> Maybe String
+toString skills =
+    case skills of
+        Points pts ->
+            if pts > 0 then
+                Just <| String.fromInt pts ++ " pts: General"
+
+            else
+                Nothing
+
+        Calc calc ->
+            case calc of
+                OnePerYear ->
+                    Just <| "one per year"
 
 
 decoder : Decoder GenSkills
