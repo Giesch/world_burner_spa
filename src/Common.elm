@@ -2,6 +2,7 @@ module Common exposing
     ( edges
     , onEnter
     , pairDecoder
+    , userSelectNone
     )
 
 import Element
@@ -44,3 +45,15 @@ enterKeyDecoder msg key =
 
     else
         Decode.fail "Not the enter key"
+
+
+userSelectNone : List (Element.Attribute msg)
+userSelectNone =
+    List.map (\key -> Element.htmlAttribute <| Html.Attributes.style key "none")
+        [ "-webkit-touch-callout"
+        , "-webkit-user-select"
+        , "-khtml-user-select"
+        , "-moz-user-select"
+        , "-ms-user-select"
+        , "user-select"
+        ]

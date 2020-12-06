@@ -483,7 +483,7 @@ ghostView dnd lifepaths =
                 (Background.color Colors.white
                     :: Border.color Colors.faint
                     :: Border.rounded 8
-                    :: Border.widthXY 0 1
+                    :: Border.width 1
                     :: (List.map htmlAttribute <| system.ghostStyles dnd)
                 )
             <|
@@ -557,6 +557,7 @@ viewSearchResultLifepath lifepath id =
         , id = id
         , removeBtnIndex = Nothing
         , warnings = []
+        , unselectable = False
         }
 
 
@@ -566,6 +567,7 @@ type alias InnerLifepathOptions =
     , id : String
     , removeBtnIndex : Maybe (Maybe Int)
     , warnings : List String
+    , unselectable : Bool
     }
 
 
@@ -578,9 +580,14 @@ viewInnerLifepath opts =
             , paddingXY 20 20
             , htmlAttribute <| Html.Attributes.id opts.id
             ]
+                ++ opts.dndStyles
 
         rowAttrs =
-            baseRowAttrs ++ opts.dndStyles
+            if opts.unselectable then
+                baseRowAttrs ++ Common.userSelectNone
+
+            else
+                baseRowAttrs
     in
     row rowAttrs <|
         [ column [ width fill, spacing 5 ] <|
@@ -696,6 +703,7 @@ viewDraggableLifepath { dnd, maybeIndex, lifepath, warnings } =
         , id = dndId maybeIndex
         , removeBtnIndex = Just maybeIndex
         , warnings = warnings
+        , unselectable = True
         }
 
 
