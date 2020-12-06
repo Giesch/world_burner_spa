@@ -1,5 +1,6 @@
 module Common exposing
-    ( dagger
+    ( clamp
+    , dagger
     , edges
     , onEnter
     , pairDecoder
@@ -26,6 +27,11 @@ sectionSign =
 edges : { left : Int, right : Int, top : Int, bottom : Int }
 edges =
     { left = 0, right = 0, top = 0, bottom = 0 }
+
+
+clamp : comparable -> ( comparable, comparable ) -> comparable
+clamp val ( minimum, maximum ) =
+    min (max val minimum) maximum
 
 
 pairDecoder : Decoder a -> Decoder b -> Decoder ( a, b )

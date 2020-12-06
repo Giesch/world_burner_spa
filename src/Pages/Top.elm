@@ -158,11 +158,9 @@ buildSearchIndex lifepaths =
         ( index, [] ) ->
             Ok index
 
-        ( _, errors ) ->
-            let
-                _ =
-                    Debug.log "buildIndexErr" errors
-            in
+        _ ->
+            -- The possible errors here come from empty documents or duplicate ids
+            -- https://package.elm-lang.org/packages/rluiten/elm-text-search/latest/ElmTextSearch
             Err ()
 
 
@@ -275,27 +273,22 @@ update msg model =
 
 handleArrow : Direction -> ModalState -> ( ModalState, Cmd Msg )
 handleArrow direction modalState =
-    case direction of
-        Up ->
-            let
-                selectedLifepath =
+    let
+        beforeClamp =
+            case direction of
+                Up ->
                     modalState.selectedLifepath - 1
-            in
-            ( { modalState | selectedLifepath = max selectedLifepath 0 }
-            , Cmd.none
-            )
 
-        Down ->
-            let
-                selectedLifepath =
+                Down ->
                     modalState.selectedLifepath + 1
-            in
-            ( { modalState | selectedLifepath = min selectedLifepath <| List.length modalState.filteredPaths }
-            , Cmd.none
-            )
 
-        Other ->
-            ( modalState, Cmd.none )
+                Other ->
+                    modalState.selectedLifepath
+
+        selectedLifepath =
+            Common.clamp beforeClamp ( 0, List.length modalState.filteredPaths - 1 )
+    in
+    ( { modalState | selectedLifepath = selectedLifepath }, Cmd.none )
 
 
 beginSearchDebounce : String -> Cmd Msg
