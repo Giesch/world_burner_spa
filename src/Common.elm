@@ -1,7 +1,9 @@
 module Common exposing
-    ( edges
+    ( dagger
+    , edges
     , onEnter
     , pairDecoder
+    , sectionSign
     , userSelectNone
     )
 
@@ -9,6 +11,16 @@ import Element
 import Html.Attributes
 import Html.Events
 import Json.Decode as Decode exposing (Decoder)
+
+
+dagger : Char
+dagger =
+    Char.fromCode 8224
+
+
+sectionSign : Char
+sectionSign =
+    Char.fromCode 167
 
 
 edges : { left : Int, right : Int, top : Int, bottom : Int }

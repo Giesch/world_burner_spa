@@ -16,12 +16,14 @@ import Element.Input as Input
 import FontAwesome.Icon as Icon
 import FontAwesome.Regular
 import FontAwesome.Solid
+import Html
 import Html.Attributes
 import Http
 import Json.Decode as Decode
 import Model.Lifepath as Lifepath exposing (Lifepath)
 import Model.Lifepath.GenSkills as GenSkills exposing (GenSkills)
 import Model.Lifepath.Resources as Resources exposing (Resources)
+import Model.Lifepath.Skill as Skill exposing (Skill)
 import Model.Lifepath.StatMod as StatMod exposing (StatMod)
 import Model.Lifepath.Trait as Trait exposing (Trait)
 import Model.Lifepath.Validation as Validation exposing (ValidPathList, ValidatedLifepath)
@@ -607,14 +609,9 @@ viewInnerLifepath opts =
                     , GenSkills.toString opts.lifepath.genSkills
                         |> Maybe.map (\genText -> text (genText ++ ", "))
                         |> Maybe.withDefault none
-                    , text <|
-                        String.fromInt opts.lifepath.skillPts
-                            ++ " pts: "
-                            ++ (String.join ", " <|
-                                    List.map (.displayName >> nonBreakingHyphens >> toTitleCase)
-                                        opts.lifepath.skills
-                               )
+                    , text <| String.fromInt opts.lifepath.skillPts ++ " pts: "
                     ]
+                        ++ (List.intersperse (text ", ") <| List.map viewSkill opts.lifepath.skills)
                 , paragraph [] <|
                     [ text <| "Traits: "
                     , text <|
@@ -651,17 +648,40 @@ viewInnerLifepath opts =
         ]
 
 
+viewSkill : Skill -> Element msg
+viewSkill skill =
+    let
+        superScript script =
+            Element.html <| Html.sup [] <| [ Html.text <| String.fromChar script ]
+
+        suffix : Maybe Char
+        suffix =
+            case ( skill.magical, skill.training ) of
+                ( False, False ) ->
+                    Nothing
+
+                ( True, False ) ->
+                    Just Common.sectionSign
+
+                ( False, True ) ->
+                    Just Common.dagger
+
+                ( True, True ) ->
+                    Just Common.dagger
+    in
+    Element.row [] <|
+        List.filterMap identity
+            [ Just <| Element.text <| Skill.toString skill
+            , Maybe.map superScript suffix
+            ]
+
+
 warningIcon : List String -> Element msg
 warningIcon warnings =
-    let
-        tooltip : Attribute msg
-        tooltip =
-            Components.tooltip onLeft (warningsTooltip warnings)
-    in
     el
         [ alignRight
         , alignTop
-        , tooltip
+        , Components.tooltip onLeft (warningsTooltip warnings)
         , transparent (List.isEmpty warnings)
         ]
     <|
@@ -705,14 +725,3 @@ viewDraggableLifepath { dnd, maybeIndex, lifepath, warnings } =
         , warnings = warnings
         , unselectable = True
         }
-
-
-nonBreakingHyphens : String -> String
-nonBreakingHyphens =
-    String.map <|
-        \c ->
-            if c == '-' then
-                Char.fromCode 8209
-
-            else
-                c
