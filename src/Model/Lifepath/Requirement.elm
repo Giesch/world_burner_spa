@@ -11,10 +11,6 @@ import Json.Decode.Pipeline exposing (required)
 import List.NonEmpty as NonEmpty exposing (NonEmpty)
 
 
-
--- TODO move this under Lifepath
-
-
 type alias Requirement =
     { predicate : Predicate
     , description : String

@@ -14,6 +14,7 @@ import Element.Events as Events
 import Element.Font as Font
 import Element.Input as Input
 import FontAwesome.Icon as Icon
+import FontAwesome.Regular
 import FontAwesome.Solid
 import Html
 import Html.Attributes
@@ -59,7 +60,7 @@ type alias Params =
 type alias Model =
     { allLifepaths : Status (List Lifepath)
     , name : String
-    , lifepaths : List Lifepath
+    , characterLifepaths : List ( Lifepath, List String )
     , dnd : DnDList.Model
     , modalState : Maybe ModalState
     }
@@ -82,7 +83,7 @@ defaultModal allLifepaths =
     }
 
 
-config : DnDList.Config Lifepath
+config : DnDList.Config ( Lifepath, List String )
 config =
     { beforeUpdate = \_ _ list -> list
     , movement = DnDList.Free
@@ -91,7 +92,7 @@ config =
     }
 
 
-system : DnDList.System Lifepath Msg
+system : DnDList.System ( Lifepath, List String ) Msg
 system =
     DnDList.create config DnDMsg
 
@@ -100,7 +101,7 @@ init : Shared.Model -> Url Params -> ( Model, Cmd Msg )
 init shared { params } =
     ( { allLifepaths = Status.Loading
       , name = ""
-      , lifepaths = []
+      , characterLifepaths = []
       , dnd = system.model
       , modalState = Nothing
       }
@@ -144,19 +145,19 @@ update msg model =
         DnDMsg dndMsg ->
             let
                 ( dnd, lifepaths ) =
-                    system.update dndMsg model.dnd model.lifepaths
+                    system.update dndMsg model.dnd model.characterLifepaths
             in
-            ( { model | dnd = dnd, lifepaths = lifepaths }
+            ( { model | dnd = dnd, characterLifepaths = Validation.revalidate lifepaths }
             , system.commands dnd
             )
 
         RemoveLifepath index ->
             let
                 lifepaths =
-                    List.take index model.lifepaths
-                        ++ List.drop (index + 1) model.lifepaths
+                    List.take index model.characterLifepaths
+                        ++ List.drop (index + 1) model.characterLifepaths
             in
-            ( { model | lifepaths = lifepaths }, Cmd.none )
+            ( { model | characterLifepaths = lifepaths }, Cmd.none )
 
         OpenModal ->
             case model.allLifepaths of
@@ -174,7 +175,8 @@ update msg model =
         SubmitModal (Just addedLifepath) ->
             ( { model
                 | modalState = Nothing
-                , lifepaths = model.lifepaths ++ [ addedLifepath ]
+                , characterLifepaths =
+                    Validation.validate <| List.map Tuple.first model.characterLifepaths ++ [ addedLifepath ]
               }
             , Cmd.none
             )
@@ -350,17 +352,17 @@ view model =
                 , placeholder = Nothing
                 , label = Input.labelAbove [] <| text "Name:"
                 }
-            , text <| "Age: " ++ String.fromInt (calculateAge model.lifepaths)
+            , text <| "Age: " ++ String.fromInt (calculateAge model.characterLifepaths)
             ]
         , heading "Lifepaths"
         , viewCharacterLifepaths model
         , el [ paddingEach { edges | right = 20, bottom = 20 }, alignRight ] <| faintButton "Add Lifepath" (Just OpenModal)
-        , ghostView model.dnd model.lifepaths
+        , ghostView model.dnd model.characterLifepaths
         ]
     }
 
 
-calculateAge : List Lifepath -> Int
+calculateAge : List Validation.ValidatedLifepath -> Int
 calculateAge lifepaths =
     let
         years lp =
@@ -371,13 +373,13 @@ calculateAge lifepaths =
                 Years.Range ( _, max ) ->
                     max
     in
-    List.sum <| List.map years lifepaths
+    List.sum <| List.map (Tuple.first >> years) lifepaths
 
 
 viewCharacterLifepaths : Model -> Element Msg
 viewCharacterLifepaths model =
     el [ width fill, padding 20 ] <|
-        case model.lifepaths of
+        case model.characterLifepaths of
             [] ->
                 none
 
@@ -399,7 +401,7 @@ viewCharacterLifepaths model =
                                     , warnings = warnings
                                     }
                             )
-                            (Validation.validate lifepaths)
+                            lifepaths
 
 
 faintButton : String -> Maybe Msg -> Element Msg
@@ -472,18 +474,19 @@ viewModal modalState =
         ]
 
 
-ghostView : DnDList.Model -> List Lifepath -> Element Msg
+ghostView : DnDList.Model -> List Validation.ValidatedLifepath -> Element Msg
 ghostView dnd lifepaths =
     let
+        maybePath : Maybe ( Int, Validation.ValidatedLifepath )
         maybePath =
             system.info dnd
                 |> Maybe.andThen
                     (\{ dragIndex } ->
-                        lifepaths |> List.drop dragIndex |> List.head
+                        lifepaths |> List.drop dragIndex |> List.head |> Maybe.map (Tuple.pair dragIndex)
                     )
     in
     case maybePath of
-        Just path ->
+        Just ( index, ( path, warnings ) ) ->
             el
                 (Background.color Colors.white
                     :: Border.color Colors.faint
@@ -492,7 +495,12 @@ ghostView dnd lifepaths =
                     :: (List.map htmlAttribute <| system.ghostStyles dnd)
                 )
             <|
-                viewDraggableLifepath { dnd = dnd, maybeIndex = Nothing, lifepath = path, warnings = [] }
+                viewDraggableLifepath
+                    { dnd = dnd
+                    , maybeIndex = Just index
+                    , lifepath = path
+                    , warnings = warnings
+                    }
 
         Nothing ->
             none
@@ -610,6 +618,15 @@ viewInnerLifepath opts =
                                )
                     , el [ alignLeft ] none
                     ]
+                , case opts.lifepath.requirement of
+                    Nothing ->
+                        none
+
+                    Just requirement ->
+                        paragraph [] <|
+                            [ text <| "Requires: "
+                            , text <| requirement.description
+                            ]
                 ]
             ]
         , warningIcon opts.warnings
@@ -621,7 +638,7 @@ viewInnerLifepath opts =
                 Input.button
                     [ alignRight, alignTop ]
                     { onPress = Maybe.map RemoveLifepath maybeIndex
-                    , label = lifepathIcon FontAwesome.Solid.trash
+                    , label = lifepathIcon FontAwesome.Regular.trashAlt
                     }
         ]
 

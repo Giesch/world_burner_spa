@@ -22,21 +22,26 @@ kindsDecoder : String -> Decoder GenSkills
 kindsDecoder kind =
     case kind of
         "points" ->
-            genSkillPointsDecoder
+            Decode.map Points (Decode.field "value" Decode.int)
 
         "calc" ->
-            genSkillCalcDecoder
+            Decode.map Calc calcDecoder
 
         k ->
             Decode.fail <| "Invalid gen skill kind: " ++ k
 
 
-genSkillPointsDecoder : Decoder GenSkills
-genSkillPointsDecoder =
-    Decode.map Points (Decode.field "value" Decode.int)
+calcDecoder : Decoder GenSkillCalc
+calcDecoder =
+    Decode.field "value" Decode.string
+        |> Decode.andThen calcFromString
 
 
-genSkillCalcDecoder : Decoder GenSkills
-genSkillCalcDecoder =
-    -- TODO actually match on the string
-    Decode.map Calc <| Decode.succeed OnePerYear
+calcFromString : String -> Decoder GenSkillCalc
+calcFromString val =
+    case val of
+        "onePerYear" ->
+            Decode.succeed OnePerYear
+
+        _ ->
+            Decode.fail <| "Invalid res calc: " ++ val
