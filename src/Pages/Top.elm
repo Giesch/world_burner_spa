@@ -71,15 +71,17 @@ type alias ModalState =
     , filteredPaths : List Lifepath
     , lifepathIndex : LifepathIndex
     , selectedLifepath : Int
+    , option : ModalOption
     }
 
 
-defaultModal : LifepathIndex -> ModalState
-defaultModal lifepathIndex =
+newModal : LifepathIndex -> ModalOption -> ModalState
+newModal lifepathIndex option =
     { searchText = ""
     , filteredPaths = LifepathIndex.lifepaths lifepathIndex
     , lifepathIndex = lifepathIndex
     , selectedLifepath = 0
+    , option = option
     }
 
 
@@ -118,13 +120,18 @@ type Msg
     | DnDMsg DnDList.Msg
     | EnteredName String
     | RemoveLifepath Int
-    | OpenModal
-    | SubmitModal (Maybe Lifepath)
+    | OpenModal ModalOption
+    | SubmitModal (Maybe ( Lifepath, ModalState ))
     | EnteredModalSearchText String
     | SearchTimePassed String
     | SelectedModalLifepath Int
     | ArrowPress Direction
     | NoOp
+
+
+type ModalOption
+    = Before
+    | After
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -172,10 +179,10 @@ update msg model =
             in
             ( { model | characterLifepaths = Validation.revalidate lifepaths }, Cmd.none )
 
-        OpenModal ->
+        OpenModal modalOption ->
             case model.searchableLifepaths of
                 Status.Loaded searchableLifepaths ->
-                    ( { model | modalState = Just <| defaultModal searchableLifepaths }
+                    ( { model | modalState = Just <| newModal searchableLifepaths modalOption }
                     , Task.attempt (\_ -> NoOp) <| Browser.Dom.focus modalSearchId
                     )
 
@@ -185,11 +192,16 @@ update msg model =
         SubmitModal Nothing ->
             ( { model | modalState = Nothing }, Cmd.none )
 
-        SubmitModal (Just addedLifepath) ->
+        SubmitModal (Just ( addedLifepath, modalState )) ->
             ( { model
                 | modalState = Nothing
                 , characterLifepaths =
-                    Validation.validate <| List.map .lifepath (Validation.unpack model.characterLifepaths) ++ [ addedLifepath ]
+                    case modalState.option of
+                        After ->
+                            Validation.validate <| List.map .lifepath (Validation.unpack model.characterLifepaths) ++ [ addedLifepath ]
+
+                        Before ->
+                            Validation.validate <| addedLifepath :: List.map .lifepath (Validation.unpack model.characterLifepaths)
               }
             , Cmd.none
             )
@@ -368,7 +380,8 @@ view model =
             ]
         , heading "Lifepaths"
         , viewCharacterLifepaths model
-        , el [ paddingEach { edges | right = 20, bottom = 20 }, alignRight ] <| faintButton "Add Lifepath" (Just OpenModal)
+        , el [ paddingEach { edges | right = 20, bottom = 20 }, alignRight ] <|
+            faintButton "Add Lifepath" (Just <| OpenModal After)
         , ghostView model.dnd unpackedLifepaths
         ]
     }
@@ -382,24 +395,19 @@ viewCharacterLifepaths model =
                 none
 
             lifepaths ->
-                el
-                    [ width fill
-                    , Border.width 1
-                    , Border.color Colors.faint
-                    , Border.rounded 8
+                column [ width fill ] <|
+                    [ el [ paddingEach { edges | bottom = 20 }, alignRight ] <|
+                        faintButton "Add Lifepath" (Just <| OpenModal Before)
+                    , el
+                        [ width fill
+                        , Border.width 1
+                        , Border.color Colors.faint
+                        , Border.rounded 8
+                        ]
+                      <|
+                        column [ width fill ] <|
+                            List.indexedMap (viewDraggableLifepath model.dnd) lifepaths
                     ]
-                <|
-                    column [ width fill ] <|
-                        List.indexedMap
-                            (\i { lifepath, warnings } ->
-                                viewDraggableLifepath
-                                    { dnd = model.dnd
-                                    , dragIndex = i
-                                    , lifepath = lifepath
-                                    , warnings = warnings
-                                    }
-                            )
-                            lifepaths
 
 
 faintButton : String -> Maybe Msg -> Element Msg
@@ -423,9 +431,14 @@ modalSearchId =
 viewModal : ModalState -> Element Msg
 viewModal modalState =
     let
+        selectedLifepath : Maybe Lifepath
         selectedLifepath =
             List.drop modalState.selectedLifepath modalState.filteredPaths
                 |> List.head
+
+        submission : Maybe ( Lifepath, ModalState )
+        submission =
+            Maybe.map (\lp -> Tuple.pair lp modalState) selectedLifepath
     in
     column
         [ width (fill |> minimum 600)
@@ -433,12 +446,11 @@ viewModal modalState =
         , Background.color Colors.white
         , Border.rounded 8
         ]
-    <|
         [ heading "Add Lifepath"
         , column [ padding 40 ]
             [ Input.text
                 [ htmlAttribute <| Html.Attributes.id modalSearchId
-                , Common.onEnter <| SubmitModal selectedLifepath
+                , Common.onEnter <| SubmitModal submission
                 ]
                 { onChange = EnteredModalSearchText
                 , text = modalState.searchText
@@ -456,18 +468,40 @@ viewModal modalState =
           <|
             List.indexedMap
                 (\i lp ->
-                    if i == modalState.selectedLifepath then
-                        el [ width fill, Background.color Colors.faint ] <|
-                            viewSearchResultLifepath lp ("search-result-lp-" ++ String.fromInt i)
+                    let
+                        baseAttrs : List (Attribute Msg)
+                        baseAttrs =
+                            [ width fill, Events.onDoubleClick <| SubmitModal submission ]
 
-                    else
-                        el [ width fill, Events.onMouseDown <| SelectedModalLifepath i ] <|
-                            viewSearchResultLifepath lp ("search-result-lp-" ++ String.fromInt i)
+                        additionalAttrs : List (Attribute Msg)
+                        additionalAttrs =
+                            if i == modalState.selectedLifepath then
+                                [ Background.color Colors.faint ]
+
+                            else
+                                [ Events.onClick <| SelectedModalLifepath i ]
+                    in
+                    el (baseAttrs ++ additionalAttrs) <|
+                        viewInnerLifepath
+                            { lifepath = lp
+                            , dragStyles = []
+                            , dropStyles = []
+                            , id = "search-result-lp-" ++ String.fromInt i
+                            , dragIndex = Nothing
+                            , warnings = Validation.emptyWarnings
+                            }
                 )
                 modalState.filteredPaths
-        , row [ width fill, height fill, Background.color Colors.white, spacing 20, padding 20 ] <|
+        , row
+            [ width fill
+            , height fill
+            , Border.rounded 8
+            , Background.color Colors.white
+            , spacing 20
+            , padding 20
+            ]
             [ faintButton "Cancel" <| Just (SubmitModal Nothing)
-            , faintButton "Add" <| Just (SubmitModal selectedLifepath)
+            , faintButton "Add" <| Just (SubmitModal submission)
             ]
         ]
 
@@ -561,23 +595,19 @@ dndId index =
     "lp-drag-" ++ String.fromInt index
 
 
-type alias LifepathOptions =
-    { dnd : DnDList.Model
-    , dragIndex : Int
-    , lifepath : Lifepath
-    , warnings : Validation.Warnings
-    }
-
-
-viewSearchResultLifepath : Lifepath -> String -> Element Msg
-viewSearchResultLifepath lifepath id =
+viewDraggableLifepath : DnDList.Model -> Int -> ValidatedLifepath -> Element Msg
+viewDraggableLifepath dnd dragIndex { lifepath, warnings } =
+    let
+        { dragStyles, dropStyles } =
+            dndStyles dnd dragIndex
+    in
     viewInnerLifepath
-        { lifepath = lifepath
-        , dragStyles = []
-        , dropStyles = []
-        , id = id
-        , dragIndex = Nothing
-        , warnings = Validation.emptyWarnings
+        { dragStyles = dragStyles
+        , dropStyles = dropStyles
+        , lifepath = lifepath
+        , id = dndId dragIndex
+        , dragIndex = Just dragIndex
+        , warnings = warnings
         }
 
 
@@ -752,19 +782,3 @@ warningsTooltip warnings =
         ]
     <|
         column [ padding 5, spacing 5, width fill, height fill ] (List.map text warnings)
-
-
-viewDraggableLifepath : LifepathOptions -> Element Msg
-viewDraggableLifepath { dnd, dragIndex, lifepath, warnings } =
-    let
-        { dragStyles, dropStyles } =
-            dndStyles dnd dragIndex
-    in
-    viewInnerLifepath
-        { dragStyles = dragStyles
-        , dropStyles = dropStyles
-        , lifepath = lifepath
-        , id = dndId dragIndex
-        , dragIndex = Just dragIndex
-        , warnings = warnings
-        }

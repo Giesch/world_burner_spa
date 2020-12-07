@@ -48,8 +48,22 @@ new paths =
 
         _ ->
             -- NOTE The possible errors here come from empty or duplicate ids, or a document that is all stop words
-            -- See add & addDocs: https://package.elm-lang.org/packages/rluiten/elm-text-search/latest/ElmTextSearch
+            -- See 'add' & 'addDocs': https://package.elm-lang.org/packages/rluiten/elm-text-search/latest/ElmTextSearch
             Nothing
+
+
+config : ElmTextSearch.SimpleConfig Lifepath
+config =
+    { ref = .id >> String.fromInt
+    , fields =
+        [ ( .name, 2.0 )
+        , ( .settingName, 0.5 )
+        ]
+    , listFields =
+        [ ( .skills >> List.map .displayName, 1.0 )
+        , ( .traits >> List.map Trait.name, 1.0 )
+        ]
+    }
 
 
 {-| Search the index for a given term, and update the index for future searches.
@@ -65,7 +79,7 @@ search term (LifepathIndex { index, lifepathsById }) =
     case ElmTextSearch.search term index of
         Err _ ->
             -- NOTE the 3 possible errors all basically mean no hits for different reasons
-            -- See search https://package.elm-lang.org/packages/rluiten/elm-text-search/latest/ElmTextSearch
+            -- See 'search' https://package.elm-lang.org/packages/rluiten/elm-text-search/latest/ElmTextSearch
             ( LifepathIndex { index = index, lifepathsById = lifepathsById }, [] )
 
         Ok ( newIndex, hitList ) ->
@@ -81,17 +95,3 @@ search term (LifepathIndex { index, lifepathsById }) =
 lifepaths : LifepathIndex -> List Lifepath
 lifepaths (LifepathIndex { lifepathsById }) =
     Dict.values lifepathsById
-
-
-config : ElmTextSearch.SimpleConfig Lifepath
-config =
-    { ref = .id >> String.fromInt
-    , fields =
-        [ ( .name, 2.0 )
-        , ( .settingName, 0.5 )
-        ]
-    , listFields =
-        [ ( .skills >> List.map .displayName, 1.0 )
-        , ( .traits >> List.map Trait.name, 1.0 )
-        ]
-    }
