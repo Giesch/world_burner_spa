@@ -113,15 +113,9 @@ view { page, toMsg } model =
 viewModal : (Msg -> msg) -> Element msg -> Element msg
 viewModal toMsg content =
     column [ width fill, height fill ]
-        [ el
-            ([ height <| px 100
-             , width fill
-             ]
-                ++ backdrop toMsg
-            )
-            none
+        [ backdrop (px 100) toMsg
         , row [ width fill ]
-            [ el ([ height fill, width fill ] ++ backdrop toMsg) none
+            [ backdrop fill toMsg
             , el
                 [ width fill
                 , height fill
@@ -130,24 +124,23 @@ viewModal toMsg content =
                     { offset = ( 5, 5 )
                     , blur = 6
                     , size = 0
-                    , color = rgba 0 0 0 0.9
+                    , color = Colors.darkShadow
                     }
+                , behindContent <| backdrop fill toMsg
                 ]
                 content
-            , el ([ height fill, width fill ] ++ backdrop toMsg) none
+            , backdrop fill toMsg
             ]
-        , el
-            ([ height (fill |> minimum 100)
-             , width fill
-             ]
-                ++ backdrop toMsg
-            )
-            none
+        , backdrop (fill |> minimum 100) toMsg
         ]
 
 
-backdrop : (Msg -> msg) -> List (Attribute msg)
-backdrop toMsg =
-    [ Background.color Colors.darkened
-    , Events.onClick (toMsg CloseModal)
-    ]
+backdrop : Element.Length -> (Msg -> msg) -> Element msg
+backdrop h toMsg =
+    el
+        [ width fill
+        , height h
+        , Background.color Colors.darkened
+        , Events.onClick (toMsg CloseModal)
+        ]
+        none

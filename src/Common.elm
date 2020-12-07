@@ -3,6 +3,7 @@ module Common exposing
     , edges
     , onEnter
     , pairDecoder
+    , swap
     , userSelectNone
     )
 
@@ -15,6 +16,11 @@ import Json.Decode as Decode exposing (Decoder)
 edges : { left : Int, right : Int, top : Int, bottom : Int }
 edges =
     { left = 0, right = 0, top = 0, bottom = 0 }
+
+
+swap : ( a, b ) -> ( b, a )
+swap ( a, b ) =
+    ( b, a )
 
 
 clamp : ( comparable, comparable ) -> comparable -> comparable

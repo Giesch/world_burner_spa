@@ -438,7 +438,7 @@ viewModal modalState =
 
         submission : Maybe ( Lifepath, ModalState )
         submission =
-            Maybe.map (\lp -> Tuple.pair lp modalState) selectedLifepath
+            Maybe.map (Tuple.pair modalState >> Common.swap) selectedLifepath
     in
     column
         [ width (fill |> minimum 600)

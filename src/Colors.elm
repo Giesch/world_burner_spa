@@ -1,6 +1,7 @@
 module Colors exposing
     ( black
     , blue
+    , darkShadow
     , darkened
     , darkenedHtml
     , disabledRed
@@ -85,6 +86,11 @@ faintHtml =
 shadow : Color
 shadow =
     rgba 0 0 0 0.4
+
+
+darkShadow : Color
+darkShadow =
+    rgba 0 0 0 0.9
 
 
 transparent : Color
