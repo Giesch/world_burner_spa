@@ -695,12 +695,14 @@ viewInnerLifepath opts =
 
 dragHandle : List (Attribute Msg) -> Element Msg
 dragHandle dragStyles =
-    el
+    Input.button
         ([ width <| px 20, height <| px 20 ]
             ++ Common.userSelectNone
             ++ dragStyles
         )
-        (text "⠶")
+        { onPress = Nothing
+        , label = text "⠶"
+        }
 
 
 viewSkill : Skill -> Element msg
