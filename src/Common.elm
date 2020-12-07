@@ -1,10 +1,12 @@
 module Common exposing
     ( clamp
     , dagger
+    , doubleDagger
     , edges
     , onEnter
     , pairDecoder
     , sectionSign
+    , tripleDagger
     , userSelectNone
     )
 
@@ -14,11 +16,30 @@ import Html.Events
 import Json.Decode as Decode exposing (Decoder)
 
 
+{-| Denotes a training skill.
+-}
 dagger : Char
 dagger =
     Char.fromCode 8224
 
 
+{-| Denotes an elven spell song.
+-}
+doubleDagger : Char
+doubleDagger =
+    Char.fromCode 8225
+
+
+{-| Denotes a magical traning.
+NOTE This is unused in the book.
+-}
+tripleDagger : Char
+tripleDagger =
+    Char.fromCode 11851
+
+
+{-| Denotes a magical (open-ended) skill.
+-}
 sectionSign : Char
 sectionSign =
     Char.fromCode 167
@@ -29,8 +50,8 @@ edges =
     { left = 0, right = 0, top = 0, bottom = 0 }
 
 
-clamp : comparable -> ( comparable, comparable ) -> comparable
-clamp val ( minimum, maximum ) =
+clamp : ( comparable, comparable ) -> comparable -> comparable
+clamp ( minimum, maximum ) val =
     min (max val minimum) maximum
 
 
@@ -62,7 +83,7 @@ enterKeyDecoder msg key =
         Decode.succeed msg
 
     else
-        Decode.fail "Not the enter key"
+        Decode.fail "Non-enter key"
 
 
 userSelectNone : List (Element.Attribute msg)

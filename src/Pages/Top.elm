@@ -14,7 +14,6 @@ import Element.Border as Border
 import Element.Events as Events
 import Element.Font as Font
 import Element.Input as Input
-import ElmTextSearch
 import FontAwesome.Icon as Icon
 import FontAwesome.Regular
 import FontAwesome.Solid
@@ -24,6 +23,7 @@ import Http
 import Json.Decode as Decode
 import Model.Lifepath as Lifepath exposing (Lifepath)
 import Model.Lifepath.GenSkills as GenSkills exposing (GenSkills)
+import Model.Lifepath.LifepathIndex as LifepathIndex exposing (LifepathIndex)
 import Model.Lifepath.Resources as Resources exposing (Resources)
 import Model.Lifepath.Skill as Skill exposing (Skill)
 import Model.Lifepath.StatMod as StatMod exposing (StatMod)
@@ -61,7 +61,7 @@ type alias Params =
 
 
 type alias Model =
-    { searchableLifepaths : Status SearchableLifepaths
+    { searchableLifepaths : Status LifepathIndex
     , name : String
     , characterLifepaths : ValidPathList
     , dnd : DnDList.Model
@@ -69,27 +69,19 @@ type alias Model =
     }
 
 
-type alias SearchableLifepaths =
-    { allLifepathsById : Dict String Lifepath
-    , searchIndex : ElmTextSearch.Index Lifepath
-    }
-
-
 type alias ModalState =
     { searchText : String
     , filteredPaths : List Lifepath
-    , allLifepathsById : Dict String Lifepath
-    , searchIndex : ElmTextSearch.Index Lifepath
+    , lifepathIndex : LifepathIndex
     , selectedLifepath : Int
     }
 
 
-defaultModal : SearchableLifepaths -> ModalState
-defaultModal searchableLifepaths =
+defaultModal : LifepathIndex -> ModalState
+defaultModal lifepathIndex =
     { searchText = ""
-    , filteredPaths = Dict.values searchableLifepaths.allLifepathsById
-    , allLifepathsById = searchableLifepaths.allLifepathsById
-    , searchIndex = searchableLifepaths.searchIndex
+    , filteredPaths = LifepathIndex.lifepaths lifepathIndex
+    , lifepathIndex = lifepathIndex
     , selectedLifepath = 0
     }
 
@@ -105,20 +97,6 @@ dndConfig =
     , movement = DnDList.Free
     , listen = DnDList.OnDrag
     , operation = DnDList.Rotate
-    }
-
-
-searchConfig : ElmTextSearch.SimpleConfig Lifepath
-searchConfig =
-    { ref = .id >> String.fromInt
-    , fields =
-        [ ( .name, 2.0 )
-        , ( .settingName, 0.5 )
-        ]
-    , listFields =
-        [ ( .skills >> List.map .displayName, 1.0 )
-        , ( .traits >> List.map Trait.name, 1.0 )
-        ]
     }
 
 
@@ -152,18 +130,6 @@ type Msg
     | NoOp
 
 
-buildSearchIndex : List Lifepath -> Result () (ElmTextSearch.Index Lifepath)
-buildSearchIndex lifepaths =
-    case ElmTextSearch.addDocs lifepaths <| ElmTextSearch.new searchConfig of
-        ( index, [] ) ->
-            Ok index
-
-        _ ->
-            -- The possible errors here come from empty documents or duplicate ids
-            -- https://package.elm-lang.org/packages/rluiten/elm-text-search/latest/ElmTextSearch
-            Err ()
-
-
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
@@ -172,22 +138,13 @@ update msg model =
 
         GotLifepaths (Ok allLifepaths) ->
             let
-                collectById : List Lifepath -> Dict String Lifepath
-                collectById =
-                    List.foldl
-                        (\lp dict -> Dict.insert (String.fromInt lp.id) lp dict)
-                        Dict.empty
-
-                searchableLifepaths : Status SearchableLifepaths
+                searchableLifepaths : Status LifepathIndex
                 searchableLifepaths =
-                    case buildSearchIndex allLifepaths of
-                        Ok searchIndex ->
-                            Status.Loaded
-                                { allLifepathsById = collectById allLifepaths
-                                , searchIndex = searchIndex
-                                }
+                    case LifepathIndex.new allLifepaths of
+                        Just searchIndex ->
+                            Status.Loaded searchIndex
 
-                        Err _ ->
+                        Nothing ->
                             Status.Failed
             in
             ( { model | searchableLifepaths = searchableLifepaths }, Cmd.none )
@@ -274,7 +231,8 @@ update msg model =
 handleArrow : Direction -> ModalState -> ( ModalState, Cmd Msg )
 handleArrow direction modalState =
     let
-        beforeClamp =
+        selectedLifepath : Int
+        selectedLifepath =
             case direction of
                 Up ->
                     modalState.selectedLifepath - 1
@@ -285,10 +243,11 @@ handleArrow direction modalState =
                 Other ->
                     modalState.selectedLifepath
 
-        selectedLifepath =
-            Common.clamp beforeClamp ( 0, List.length modalState.filteredPaths - 1 )
+        clamp : Int -> Int
+        clamp =
+            Common.clamp ( 0, List.length modalState.filteredPaths - 1 )
     in
-    ( { modalState | selectedLifepath = selectedLifepath }, Cmd.none )
+    ( { modalState | selectedLifepath = clamp selectedLifepath }, Cmd.none )
 
 
 beginSearchDebounce : String -> Cmd Msg
@@ -309,22 +268,16 @@ searchTimePassed oldSearchText modalState =
 searchLifepaths : ModalState -> ModalState
 searchLifepaths modalState =
     let
-        lookupHit : ( String, Float ) -> Maybe Lifepath
-        lookupHit ( id, _ ) =
-            Dict.get id modalState.allLifepathsById
+        ( newIndex, hits ) =
+            LifepathIndex.search
+                modalState.searchText
+                modalState.lifepathIndex
     in
-    case ElmTextSearch.search modalState.searchText modalState.searchIndex of
-        Err _ ->
-            -- NOTE the 3 possible errors all basically mean no hits for different reasons
-            -- https://package.elm-lang.org/packages/rluiten/elm-text-search/latest/ElmTextSearch
-            { modalState | filteredPaths = [] }
-
-        Ok ( newIndex, hitList ) ->
-            { modalState
-                | selectedLifepath = 0
-                , filteredPaths = List.filterMap lookupHit hitList
-                , searchIndex = newIndex
-            }
+    { modalState
+        | selectedLifepath = 0
+        , filteredPaths = hits
+        , lifepathIndex = newIndex
+    }
 
 
 updateModal : (ModalState -> ( ModalState, Cmd Msg )) -> Model -> ( Model, Cmd Msg )
@@ -721,7 +674,9 @@ viewSkill skill =
                     Just Common.dagger
 
                 ( True, True ) ->
-                    Just Common.dagger
+                    -- NOTE this case no longer shows up in the book
+                    -- (double dagger will be taken for spell songs)
+                    Just Common.tripleDagger
     in
     Element.row [] <|
         List.filterMap identity
