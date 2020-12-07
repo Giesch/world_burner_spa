@@ -1,6 +1,8 @@
 module Model.Lifepath.Validation exposing
     ( ValidPathList
     , ValidatedLifepath
+    , Warnings
+    , emptyWarnings
     , revalidate
     , unpack
     , validate
@@ -23,7 +25,20 @@ unpack (Validated paths) =
 
 type alias ValidatedLifepath =
     { lifepath : Lifepath
-    , warnings : List String
+    , warnings : Warnings
+    }
+
+
+type alias Warnings =
+    { general : List String
+    , requirementSatisfied : Bool
+    }
+
+
+emptyWarnings : Warnings
+emptyWarnings =
+    { general = []
+    , requirementSatisfied = True
     }
 
 
@@ -38,7 +53,7 @@ validate lifepaths =
         initialPairs : List ValidatedLifepath
         initialPairs =
             List.map2 ValidatedLifepath lifepaths <|
-                List.repeat (List.length lifepaths) []
+                List.repeat (List.length lifepaths) emptyWarnings
     in
     initialPairs
         |> addMissingBornWarning
@@ -59,10 +74,18 @@ addMissingBornWarning lifepathWarnings =
                 lifepathWarnings
 
             else
-                { lifepath = lifepath, warnings = message :: warnings } :: rest
+                { lifepath = lifepath
+                , warnings = addGeneralWarning message warnings
+                }
+                    :: rest
 
         _ ->
             lifepathWarnings
+
+
+addGeneralWarning : String -> Warnings -> Warnings
+addGeneralWarning message warnings =
+    { warnings | general = message :: warnings.general }
 
 
 addMisplacedBornWarning : List ValidatedLifepath -> List ValidatedLifepath
@@ -73,7 +96,7 @@ addMisplacedBornWarning lifepathWarnings =
 
         requireNonBorn { lifepath, warnings } =
             if lifepath.born then
-                { lifepath = lifepath, warnings = message :: warnings }
+                { lifepath = lifepath, warnings = addGeneralWarning message warnings }
 
             else
                 { lifepath = lifepath, warnings = warnings }
@@ -92,22 +115,22 @@ checkRequirements lifepaths =
         |> (.validated >> List.reverse)
 
 
-checkPath : ValidatedLifepath -> ReqData -> ReqData
+checkPath : ValidatedLifepath -> Summary -> Summary
 checkPath pair data =
     case pair.lifepath.requirement of
         Nothing ->
             addLifepath pair data
 
         Just requirement ->
-            if passes requirement.predicate data then
+            if satisfies requirement.predicate data then
                 addLifepath pair data
 
             else
-                continueWithMessage requirement.description pair data
+                addLifepathWithWarning pair data
 
 
-passes : Predicate -> ReqData -> Bool
-passes pred data =
+satisfies : Predicate -> Summary -> Bool
+satisfies pred data =
     let
         hasAtLeast count id dict =
             Dict.get id dict
@@ -125,21 +148,21 @@ passes pred data =
             hasAtLeast count settingId data.settingIdCounts
 
         Requirement.Any preds ->
-            NonEmpty.any (\p -> passes p data) preds
+            NonEmpty.any (\p -> satisfies p data) preds
 
         Requirement.All preds ->
-            NonEmpty.all (\p -> passes p data) preds
+            NonEmpty.all (\p -> satisfies p data) preds
 
 
-continueWithMessage : String -> ValidatedLifepath -> ReqData -> ReqData
-continueWithMessage description { lifepath, warnings } =
+addLifepathWithWarning : ValidatedLifepath -> Summary -> Summary
+addLifepathWithWarning { lifepath, warnings } =
     addLifepath
         { lifepath = lifepath
-        , warnings = ("Requires: " ++ description) :: warnings
+        , warnings = { warnings | requirementSatisfied = False }
         }
 
 
-addLifepath : ValidatedLifepath -> ReqData -> ReqData
+addLifepath : ValidatedLifepath -> Summary -> Summary
 addLifepath pair data =
     { lifepathIdCounts =
         Dict.update pair.lifepath.id increment data.lifepathIdCounts
@@ -160,7 +183,7 @@ increment entry =
             Just 1
 
 
-type alias ReqData =
+type alias Summary =
     { lifepathIdCounts : Dict Int Int
     , settingIdCounts : Dict Int Int
     , totalLifepaths : Int
@@ -168,7 +191,7 @@ type alias ReqData =
     }
 
 
-initial : ReqData
+initial : Summary
 initial =
     { lifepathIdCounts = Dict.empty
     , settingIdCounts = Dict.empty

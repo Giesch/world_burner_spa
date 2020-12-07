@@ -76,6 +76,8 @@ search term (LifepathIndex { index, lifepathsById }) =
             ( LifepathIndex { index = newIndex, lifepathsById = lifepathsById }, hits )
 
 
+{-| Get the lifepaths from the index in id order.
+-}
 lifepaths : LifepathIndex -> List Lifepath
 lifepaths (LifepathIndex { lifepathsById }) =
     Dict.values lifepathsById

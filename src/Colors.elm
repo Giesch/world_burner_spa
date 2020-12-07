@@ -8,12 +8,13 @@ module Colors exposing
     , faint
     , faintHtml
     , red
+    , shadow
     , successGlow
     , transparent
     , white
     )
 
-import Element exposing (Attribute, Color, fromRgb255, rgb255, rgba255)
+import Element exposing (Attribute, Color, fromRgb255, rgb255, rgba, rgba255)
 import Element.Border as Border
 import Html
 import Html.Attributes
@@ -79,6 +80,11 @@ faint =
 faintHtml : Html.Attribute msg
 faintHtml =
     Html.Attributes.style "color" "rgba(0,0,0,0.1)"
+
+
+shadow : Color
+shadow =
+    rgba 0 0 0 0.4
 
 
 transparent : Color

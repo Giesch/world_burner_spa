@@ -1,12 +1,8 @@
 module Common exposing
     ( clamp
-    , dagger
-    , doubleDagger
     , edges
     , onEnter
     , pairDecoder
-    , sectionSign
-    , tripleDagger
     , userSelectNone
     )
 
@@ -14,35 +10,6 @@ import Element
 import Html.Attributes
 import Html.Events
 import Json.Decode as Decode exposing (Decoder)
-
-
-{-| Denotes a training skill.
--}
-dagger : Char
-dagger =
-    Char.fromCode 8224
-
-
-{-| Denotes an elven spell song.
--}
-doubleDagger : Char
-doubleDagger =
-    Char.fromCode 8225
-
-
-{-| Denotes a magical traning.
-NOTE This is unused in the book.
--}
-tripleDagger : Char
-tripleDagger =
-    Char.fromCode 11851
-
-
-{-| Denotes a magical (open-ended) skill.
--}
-sectionSign : Char
-sectionSign =
-    Char.fromCode 167
 
 
 edges : { left : Int, right : Int, top : Int, bottom : Int }

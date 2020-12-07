@@ -14,9 +14,6 @@ import Element.Border as Border
 import Element.Events as Events
 import Element.Font as Font
 import Element.Input as Input
-import FontAwesome.Icon as Icon
-import FontAwesome.Regular
-import FontAwesome.Solid
 import Html
 import Html.Attributes
 import Http
@@ -397,7 +394,7 @@ viewCharacterLifepaths model =
                             (\i { lifepath, warnings } ->
                                 viewDraggableLifepath
                                     { dnd = model.dnd
-                                    , maybeIndex = Just i
+                                    , dragIndex = Just i
                                     , lifepath = lifepath
                                     , warnings = warnings
                                     }
@@ -488,20 +485,24 @@ ghostView dnd lifepaths =
     in
     case maybePath of
         Just ( index, { lifepath, warnings } ) ->
-            el
-                (Background.color Colors.white
-                    :: Border.color Colors.faint
-                    :: Border.rounded 8
-                    :: Border.width 1
-                    :: (List.map htmlAttribute <| system.ghostStyles dnd)
+            row
+                ([ Background.color Colors.white
+                 , Border.color Colors.faint
+                 , Border.rounded 8
+                 , Border.width 1
+
+                 -- , width (fill |> maximum 300)
+                 , height (fill |> maximum 50)
+                 , padding 20
+                 ]
+                    ++ (List.map htmlAttribute <| system.ghostStyles dnd)
                 )
             <|
-                viewDraggableLifepath
-                    { dnd = dnd
-                    , maybeIndex = Just index
-                    , lifepath = lifepath
-                    , warnings = warnings
-                    }
+                [ dragHandle []
+                , text <| toTitleCase lifepath.name
+                , el [ Font.size 18, paddingEach { edges | left = 20 } ] <|
+                    (text <| "(" ++ toTitleCase lifepath.settingName ++ ")")
+                ]
 
         Nothing ->
             none
@@ -519,25 +520,37 @@ heading h =
         text h
 
 
-{-| For non-ghost dnd list elements. Goes on the handle
--}
-dndStyles : DnDList.Model -> Int -> List (Attribute Msg)
+type alias DnDStyles =
+    { dragStyles : List (Attribute Msg)
+    , dropStyles : List (Attribute Msg)
+    }
+
+
+emptyDnDStyles : DnDStyles
+emptyDnDStyles =
+    { dragStyles = [], dropStyles = [] }
+
+
+dndStyles : DnDList.Model -> Int -> DnDStyles
 dndStyles dnd index =
     let
         id =
             dndId <| Just index
     in
-    List.map htmlAttribute <|
-        case system.info dnd of
-            Just { dragIndex } ->
-                if dragIndex /= index then
-                    system.dropEvents index id
+    case system.info dnd of
+        Just { dragIndex } ->
+            if dragIndex /= index then
+                { dragStyles = []
+                , dropStyles = List.map htmlAttribute <| system.dropEvents index id
+                }
 
-                else
-                    []
+            else
+                { dragStyles = [], dropStyles = [] }
 
-            Nothing ->
-                system.dragEvents index id
+        Nothing ->
+            { dragStyles = List.map htmlAttribute <| system.dragEvents index id
+            , dropStyles = []
+            }
 
 
 dndId : Maybe Int -> String
@@ -552,9 +565,9 @@ dndId maybeIndex =
 
 type alias LifepathOptions =
     { dnd : DnDList.Model
-    , maybeIndex : Maybe Int
+    , dragIndex : Maybe Int -- Nothing = not draggable
     , lifepath : Lifepath
-    , warnings : List String
+    , warnings : Validation.Warnings
     }
 
 
@@ -562,48 +575,62 @@ viewSearchResultLifepath : Lifepath -> String -> Element Msg
 viewSearchResultLifepath lifepath id =
     viewInnerLifepath
         { lifepath = lifepath
-        , dndStyles = []
+        , dragStyles = []
+        , dropStyles = []
         , id = id
-        , removeBtnIndex = Nothing
-        , warnings = []
-        , unselectable = False
+        , dragIndex = Nothing
+        , warnings = Validation.emptyWarnings
         }
 
 
 type alias InnerLifepathOptions =
-    { dndStyles : List (Attribute Msg)
+    { dropStyles : List (Attribute Msg)
+    , dragStyles : List (Attribute Msg)
     , lifepath : Lifepath
     , id : String
-    , removeBtnIndex : Maybe (Maybe Int)
-    , warnings : List String
-    , unselectable : Bool
+    , dragIndex : Maybe Int -- Nothing means not draggable
+    , warnings : Validation.Warnings
     }
 
 
 viewInnerLifepath : InnerLifepathOptions -> Element Msg
 viewInnerLifepath opts =
     let
-        baseRowAttrs =
+        isDraggable =
+            case opts.dragIndex of
+                Just _ ->
+                    True
+
+                Nothing ->
+                    False
+
+        rowAttrs =
             [ width fill
             , spacing 10
             , paddingXY 20 20
             , htmlAttribute <| Html.Attributes.id opts.id
             ]
-                ++ opts.dndStyles
-
-        rowAttrs =
-            if opts.unselectable then
-                baseRowAttrs ++ Common.userSelectNone
-
-            else
-                baseRowAttrs
+                ++ opts.dropStyles
     in
     row rowAttrs <|
         [ column [ width fill, spacing 5 ] <|
             [ row [ width fill ]
-                [ text <| toTitleCase opts.lifepath.name
+                [ if isDraggable then
+                    dragHandle opts.dragStyles
+
+                  else
+                    none
+                , text <| toTitleCase opts.lifepath.name
                 , el [ Font.size 18, paddingEach { edges | left = 20 } ] <|
                     (text <| "(" ++ toTitleCase opts.lifepath.settingName ++ ")")
+                , el
+                    [ alignTop
+                    , alignLeft
+                    , Components.tooltip above (warningsTooltip opts.warnings.general)
+                    , transparent (List.isEmpty opts.warnings.general)
+                    , paddingEach { edges | left = 20 }
+                    ]
+                    Components.warningIcon
                 ]
             , textColumn [ width fill, Font.size 18 ]
                 [ row [ width fill, spacing 10, Font.size 18 ]
@@ -630,83 +657,88 @@ viewInnerLifepath opts =
                     [ text "Leads: "
                     , text <| String.join ", " <| List.map (.settingName >> toTitleCase) opts.lifepath.leads
                     ]
-                , case opts.lifepath.requirement of
-                    Nothing ->
+
+                -- this nonsense seems necessary to make the width work in both the modal and the page
+                , case ( opts.lifepath.requirement, isDraggable ) of
+                    ( Nothing, _ ) ->
                         none
 
-                    Just requirement ->
-                        paragraph [] <|
-                            [ text <| "Requires: "
-                            , text <| requirement.description
+                    ( Just requirement, False ) ->
+                        row [] <|
+                            [ paragraph [] [ text <| "Requires: " ++ requirement.description ]
+                            ]
+
+                    ( Just requirement, True ) ->
+                        row [] <|
+                            [ text <| "Requires: " ++ requirement.description
+                            , el
+                                [ alignTop
+                                , alignLeft
+                                , paddingEach { edges | left = 20 }
+                                , Components.tooltip above (warningsTooltip [ "Missing lifepath requirement" ])
+                                , transparent opts.warnings.requirementSatisfied
+                                ]
+                                Components.warningIcon
                             ]
                 ]
             ]
-        , warningIcon opts.warnings
-        , case opts.removeBtnIndex of
+        , case opts.dragIndex of
             Nothing ->
                 none
 
-            Just maybeIndex ->
+            Just index ->
                 Input.button
                     [ alignRight, alignTop ]
-                    { onPress = Maybe.map RemoveLifepath maybeIndex
-                    , label = lifepathIcon FontAwesome.Regular.trashAlt
+                    { onPress = Just <| RemoveLifepath index
+                    , label = Components.deleteIcon
                     }
         ]
+
+
+dragHandle : List (Attribute Msg) -> Element Msg
+dragHandle dragStyles =
+    el
+        ([ width <| px 20, height <| px 20 ]
+            ++ Common.userSelectNone
+            ++ dragStyles
+        )
+        (text "⠶")
 
 
 viewSkill : Skill -> Element msg
 viewSkill skill =
     let
-        superScript script =
-            Element.html <| Html.sup [] <| [ Html.text <| String.fromChar script ]
-
-        suffix : Maybe Char
+        suffix : Maybe String
         suffix =
             case ( skill.magical, skill.training ) of
                 ( False, False ) ->
                     Nothing
 
                 ( True, False ) ->
-                    Just Common.sectionSign
+                    Just "§"
 
                 ( False, True ) ->
-                    Just Common.dagger
+                    Just "†"
 
                 ( True, True ) ->
-                    -- NOTE this case no longer shows up in the book
-                    -- (double dagger will be taken for spell songs)
-                    Just Common.tripleDagger
+                    -- NOTE this doesn't appear in book data
+                    -- but we'll still want another symbol
+                    -- (double dagger is taken by elves)
+                    Just "§"
     in
     Element.row [] <|
         List.filterMap identity
             [ Just <| Element.text <| Skill.toString skill
-            , Maybe.map superScript suffix
+            , Maybe.map Components.superScript suffix
             ]
-
-
-warningIcon : List String -> Element msg
-warningIcon warnings =
-    el
-        [ alignRight
-        , alignTop
-        , Components.tooltip onLeft (warningsTooltip warnings)
-        , transparent (List.isEmpty warnings)
-        ]
-    <|
-        lifepathIcon FontAwesome.Solid.exclamationTriangle
-
-
-lifepathIcon : Icon.Icon -> Element msg
-lifepathIcon icon =
-    el [ alignRight, alignTop, paddingEach { edges | right = 10 } ] <|
-        (html <| Icon.viewStyled [ Colors.darkenedHtml ] icon)
 
 
 warningsTooltip : List String -> Element msg
 warningsTooltip warnings =
     el
         [ Background.color Colors.white
+        , width fill
+        , height fill
         , Font.color Colors.black
         , padding 5
         , Border.rounded 5
@@ -715,22 +747,24 @@ warningsTooltip warnings =
             { offset = ( 0, 3 )
             , blur = 6
             , size = 0
-            , color = rgba 0 0 0 0.32
+            , color = Colors.shadow
             }
         ]
     <|
-        column [ padding 5, spacing 5 ] (List.map text warnings)
+        column [ padding 5, spacing 5, width fill, height fill ] (List.map text warnings)
 
 
 viewDraggableLifepath : LifepathOptions -> Element Msg
-viewDraggableLifepath { dnd, maybeIndex, lifepath, warnings } =
+viewDraggableLifepath { dnd, dragIndex, lifepath, warnings } =
+    let
+        { dragStyles, dropStyles } =
+            Maybe.map (dndStyles dnd) dragIndex |> Maybe.withDefault emptyDnDStyles
+    in
     viewInnerLifepath
-        { dndStyles =
-            Maybe.map (dndStyles dnd) maybeIndex
-                |> Maybe.withDefault []
+        { dragStyles = dragStyles
+        , dropStyles = dropStyles
         , lifepath = lifepath
-        , id = dndId maybeIndex
-        , removeBtnIndex = Just maybeIndex
+        , id = dndId dragIndex
+        , dragIndex = dragIndex
         , warnings = warnings
-        , unselectable = True
         }
