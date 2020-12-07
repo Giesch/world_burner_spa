@@ -91,7 +91,11 @@ view { page, toMsg } model =
                 ]
                 []
             , row
-                [ height fill, width fill, paddingXY 100 50 ]
+                [ height fill
+                , width (fill |> maximum 1600)
+                , paddingXY 100 50
+                , centerX
+                ]
                 [ column
                     [ height fill
                     , width fill

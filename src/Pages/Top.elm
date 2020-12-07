@@ -394,7 +394,7 @@ viewCharacterLifepaths model =
                             (\i { lifepath, warnings } ->
                                 viewDraggableLifepath
                                     { dnd = model.dnd
-                                    , dragIndex = Just i
+                                    , dragIndex = i
                                     , lifepath = lifepath
                                     , warnings = warnings
                                     }
@@ -475,27 +475,30 @@ viewModal modalState =
 ghostView : DnDList.Model -> List Validation.ValidatedLifepath -> Element Msg
 ghostView dnd lifepaths =
     let
-        maybePath : Maybe ( Int, Validation.ValidatedLifepath )
-        maybePath =
+        draggedPath : Maybe Validation.ValidatedLifepath
+        draggedPath =
             system.info dnd
                 |> Maybe.andThen
                     (\{ dragIndex } ->
-                        lifepaths |> List.drop dragIndex |> List.head |> Maybe.map (Tuple.pair dragIndex)
+                        lifepaths
+                            |> List.drop dragIndex
+                            |> List.head
                     )
     in
-    case maybePath of
-        Just ( index, { lifepath, warnings } ) ->
+    case draggedPath of
+        Just { lifepath } ->
             row
                 ([ Background.color Colors.white
                  , Border.color Colors.faint
                  , Border.rounded 8
                  , Border.width 1
-
-                 -- , width (fill |> maximum 300)
+                 , width shrink
                  , height (fill |> maximum 50)
                  , padding 20
                  ]
                     ++ (List.map htmlAttribute <| system.ghostStyles dnd)
+                    -- NOTE order matters for this; we need our style to override ghostStyles
+                    ++ [ htmlAttribute <| Html.Attributes.style "width" "auto" ]
                 )
             <|
                 [ dragHandle []
@@ -535,7 +538,7 @@ dndStyles : DnDList.Model -> Int -> DnDStyles
 dndStyles dnd index =
     let
         id =
-            dndId <| Just index
+            dndId index
     in
     case system.info dnd of
         Just { dragIndex } ->
@@ -553,19 +556,14 @@ dndStyles dnd index =
             }
 
 
-dndId : Maybe Int -> String
-dndId maybeIndex =
-    case maybeIndex of
-        Just index ->
-            "lp-drag-" ++ String.fromInt index
-
-        Nothing ->
-            "lp-drag-ghost"
+dndId : Int -> String
+dndId index =
+    "lp-drag-" ++ String.fromInt index
 
 
 type alias LifepathOptions =
     { dnd : DnDList.Model
-    , dragIndex : Maybe Int -- Nothing = not draggable
+    , dragIndex : Int
     , lifepath : Lifepath
     , warnings : Validation.Warnings
     }
@@ -758,13 +756,13 @@ viewDraggableLifepath : LifepathOptions -> Element Msg
 viewDraggableLifepath { dnd, dragIndex, lifepath, warnings } =
     let
         { dragStyles, dropStyles } =
-            Maybe.map (dndStyles dnd) dragIndex |> Maybe.withDefault emptyDnDStyles
+            dndStyles dnd dragIndex
     in
     viewInnerLifepath
         { dragStyles = dragStyles
         , dropStyles = dropStyles
         , lifepath = lifepath
         , id = dndId dragIndex
-        , dragIndex = dragIndex
+        , dragIndex = Just dragIndex
         , warnings = warnings
         }
