@@ -21,6 +21,7 @@ import Json.Decode as Decode
 import Model.Lifepath as Lifepath exposing (Lifepath)
 import Model.Lifepath.GenSkills as GenSkills exposing (GenSkills)
 import Model.Lifepath.LifepathIndex as LifepathIndex exposing (LifepathIndex)
+import Model.Lifepath.Requirement as Requirement exposing (Requirement)
 import Model.Lifepath.Resources as Resources exposing (Resources)
 import Model.Lifepath.Skill as Skill exposing (Skill)
 import Model.Lifepath.StatMod as StatMod exposing (StatMod)
@@ -121,6 +122,7 @@ type Msg
     | EnteredName String
     | RemoveLifepath Int
     | OpenModal ModalOption
+    | SatisfyRequirement Requirement Int
     | SubmitModal (Maybe ( Lifepath, ModalState ))
     | EnteredModalSearchText String
     | SearchTimePassed String
@@ -188,6 +190,9 @@ update msg model =
 
                 _ ->
                     ( model, Cmd.none )
+
+        SatisfyRequirement requirement index ->
+            Debug.todo "open a modal filtered to that requirement, that inserts just before index"
 
         SubmitModal Nothing ->
             ( { model | modalState = Nothing }, Cmd.none )
@@ -624,6 +629,7 @@ type alias InnerLifepathOptions =
 viewInnerLifepath : InnerLifepathOptions -> Element Msg
 viewInnerLifepath opts =
     let
+        isDraggable : Bool
         isDraggable =
             case opts.dragIndex of
                 Just _ ->
@@ -631,16 +637,15 @@ viewInnerLifepath opts =
 
                 Nothing ->
                     False
-
-        rowAttrs =
-            [ width fill
-            , spacing 10
-            , paddingXY 20 20
-            , htmlAttribute <| Html.Attributes.id opts.id
-            ]
-                ++ opts.dropStyles
     in
-    row rowAttrs <|
+    row
+        ([ width fill
+         , spacing 10
+         , paddingXY 20 20
+         , htmlAttribute <| Html.Attributes.id opts.id
+         ]
+            ++ opts.dropStyles
+        )
         [ column [ width fill, spacing 5 ] <|
             [ row [ width fill ]
                 [ if isDraggable then
@@ -673,54 +678,68 @@ viewInnerLifepath opts =
                         |> Maybe.withDefault none
                     , text <| String.fromInt opts.lifepath.skillPts ++ " pts: "
                     ]
-                        ++ (List.intersperse (text ", ") <| List.map viewSkill opts.lifepath.skills)
+                        ++ (List.intersperse (text ", ") <|
+                                List.map viewSkill opts.lifepath.skills
+                           )
                 , paragraph [] <|
                     [ text <| "Traits: "
                     , text <|
                         String.fromInt opts.lifepath.traitPts
                             ++ " pts: "
-                            ++ (String.join ", " <| List.map (Trait.name >> toTitleCase) opts.lifepath.traits)
+                            ++ (String.join ", " <|
+                                    List.map (Trait.name >> toTitleCase)
+                                        opts.lifepath.traits
+                               )
                     ]
                 , paragraph [ width fill ] <|
                     [ text "Leads: "
-                    , text <| String.join ", " <| List.map (.settingName >> toTitleCase) opts.lifepath.leads
+                    , text <|
+                        String.join ", " <|
+                            List.map (.settingName >> toTitleCase) opts.lifepath.leads
                     ]
-
-                -- this nonsense seems necessary to make the width work in both the modal and the page
-                , case ( opts.lifepath.requirement, isDraggable ) of
-                    ( Nothing, _ ) ->
-                        none
-
-                    ( Just requirement, False ) ->
-                        row [] <|
-                            [ paragraph [] [ text <| "Requires: " ++ requirement.description ]
-                            ]
-
-                    ( Just requirement, True ) ->
-                        row [] <|
-                            [ text <| "Requires: " ++ requirement.description
-                            , el
-                                [ alignTop
-                                , alignLeft
-                                , paddingEach { edges | left = 20 }
-                                , Components.tooltip above (warningsTooltip [ "Missing lifepath requirement" ])
-                                , transparent opts.warnings.requirementSatisfied
-                                ]
-                                Components.warningIcon
-                            ]
+                , requirementRow opts
                 ]
             ]
-        , case opts.dragIndex of
-            Nothing ->
-                none
-
-            Just index ->
-                Input.button
-                    [ alignRight, alignTop ]
-                    { onPress = Just <| RemoveLifepath index
-                    , label = Components.deleteIcon
-                    }
+        , Maybe.map deleteButton opts.dragIndex |> Maybe.withDefault none
         ]
+
+
+requirementRow : InnerLifepathOptions -> Element Msg
+requirementRow opts =
+    -- this nonsense seems necessary to make the width work in both the modal and the page
+    case ( opts.lifepath.requirement, opts.dragIndex ) of
+        ( Nothing, _ ) ->
+            none
+
+        ( Just requirement, Nothing ) ->
+            row [] <|
+                [ paragraph [] [ text <| "Requires: " ++ requirement.description ]
+                ]
+
+        ( Just requirement, Just dragIndex ) ->
+            row [] <|
+                [ text <| "Requires: " ++ requirement.description
+                , Input.button
+                    [ alignTop
+                    , alignLeft
+                    , paddingEach { edges | left = 20 }
+                    , Components.tooltip above <|
+                        warningsTooltip [ "Missing lifepath requirement" ]
+                    , transparent opts.warnings.requirementSatisfied
+                    ]
+                    { onPress = Just <| SatisfyRequirement requirement dragIndex
+                    , label = Components.warningIcon
+                    }
+                ]
+
+
+deleteButton : Int -> Element Msg
+deleteButton dragIndex =
+    Input.button
+        [ alignRight, alignTop ]
+        { onPress = Just <| RemoveLifepath dragIndex
+        , label = Components.deleteIcon
+        }
 
 
 dragHandle : List (Attribute Msg) -> Element Msg
