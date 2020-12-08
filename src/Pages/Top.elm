@@ -79,8 +79,6 @@ type alias ModalState =
 newModal : LifepathIndex -> ModalOption -> ModalState
 newModal lifepathIndex option =
     { searchText = ""
-
-    -- TODO make a type that enforces doing this filter
     , filteredPaths =
         applyOptionFilter option <|
             LifepathIndex.lifepaths lifepathIndex
@@ -757,8 +755,7 @@ requirementRow opts =
                     , alignLeft
                     , paddingEach { edges | left = 20 }
                     , Components.tooltip above <|
-                        -- TODO this tooltip should describe the click action
-                        warningsTooltip [ "Missing lifepath requirement" ]
+                        warningsTooltip [ "Satisfy missing lifepath requirement" ]
                     , transparent opts.warnings.requirementSatisfied
                     ]
                     { onPress = Just <| SatisfyRequirement requirement dragIndex
