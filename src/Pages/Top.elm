@@ -79,11 +79,26 @@ type alias ModalState =
 newModal : LifepathIndex -> ModalOption -> ModalState
 newModal lifepathIndex option =
     { searchText = ""
-    , filteredPaths = LifepathIndex.lifepaths lifepathIndex
+
+    -- TODO make a type that enforces doing this filter
+    , filteredPaths =
+        applyOptionFilter option <|
+            LifepathIndex.lifepaths lifepathIndex
     , lifepathIndex = lifepathIndex
     , selectedLifepath = 0
     , option = option
     }
+
+
+applyOptionFilter : ModalOption -> List Lifepath -> List Lifepath
+applyOptionFilter option =
+    case option of
+        RequirementAt requirement _ ->
+            List.filter
+                (\lp -> Lifepath.mentionedIn lp requirement.predicate)
+
+        _ ->
+            identity
 
 
 system : DnDList.System ValidatedLifepath Msg
@@ -134,6 +149,7 @@ type Msg
 type ModalOption
     = Before
     | After
+    | RequirementAt Requirement Int
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -192,7 +208,19 @@ update msg model =
                     ( model, Cmd.none )
 
         SatisfyRequirement requirement index ->
-            Debug.todo "open a modal filtered to that requirement, that inserts just before index"
+            case model.searchableLifepaths of
+                Status.Loaded searchableLifepaths ->
+                    let
+                        option : ModalOption
+                        option =
+                            RequirementAt requirement index
+                    in
+                    ( { model | modalState = Just <| newModal searchableLifepaths option }
+                    , Task.attempt (\_ -> NoOp) <| Browser.Dom.focus modalSearchId
+                    )
+
+                _ ->
+                    ( model, Cmd.none )
 
         SubmitModal Nothing ->
             ( { model | modalState = Nothing }, Cmd.none )
@@ -201,12 +229,22 @@ update msg model =
             ( { model
                 | modalState = Nothing
                 , characterLifepaths =
+                    let
+                        unpackedLifepaths : List Lifepath
+                        unpackedLifepaths =
+                            List.map .lifepath (Validation.unpack model.characterLifepaths)
+                    in
                     case modalState.option of
                         After ->
-                            Validation.validate <| List.map .lifepath (Validation.unpack model.characterLifepaths) ++ [ addedLifepath ]
+                            Validation.validate <| unpackedLifepaths ++ [ addedLifepath ]
 
                         Before ->
-                            Validation.validate <| addedLifepath :: List.map .lifepath (Validation.unpack model.characterLifepaths)
+                            Validation.validate <| addedLifepath :: unpackedLifepaths
+
+                        RequirementAt _ index ->
+                            Validation.validate <|
+                                List.take index unpackedLifepaths
+                                    ++ (addedLifepath :: List.drop index unpackedLifepaths)
               }
             , Cmd.none
             )
@@ -289,7 +327,7 @@ searchLifepaths modalState =
     in
     { modalState
         | selectedLifepath = 0
-        , filteredPaths = hits
+        , filteredPaths = applyOptionFilter modalState.option hits
         , lifepathIndex = newIndex
     }
 
@@ -568,11 +606,6 @@ type alias DnDStyles =
     }
 
 
-emptyDnDStyles : DnDStyles
-emptyDnDStyles =
-    { dragStyles = [], dropStyles = [] }
-
-
 dndStyles : DnDList.Model -> Int -> DnDStyles
 dndStyles dnd index =
     let
@@ -724,6 +757,7 @@ requirementRow opts =
                     , alignLeft
                     , paddingEach { edges | left = 20 }
                     , Components.tooltip above <|
+                        -- TODO this tooltip should describe the click action
                         warningsTooltip [ "Missing lifepath requirement" ]
                     , transparent opts.warnings.requirementSatisfied
                     ]

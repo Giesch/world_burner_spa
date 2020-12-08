@@ -1,12 +1,14 @@
 module Model.Lifepath exposing
     ( Lifepath
     , decoder
+    , mentionedIn
     )
 
 import Colors exposing (..)
 import Element exposing (..)
 import Json.Decode as Decode exposing (Decoder)
 import Json.Decode.Pipeline exposing (optional, required)
+import List.NonEmpty as NonEmpty exposing (NonEmpty)
 import Model.Lifepath.GenSkills as GenSkills exposing (GenSkills)
 import Model.Lifepath.Lead as Lead exposing (Lead)
 import Model.Lifepath.Requirement as Requirement exposing (Requirement)
@@ -35,6 +37,25 @@ type alias Lifepath =
     , born : Bool
     , requirement : Maybe Requirement
     }
+
+
+mentionedIn : Lifepath -> Requirement.Predicate -> Bool
+mentionedIn lifepath predicate =
+    case predicate of
+        Requirement.SpecificLifepath { lifepathId } ->
+            lifepathId == lifepath.id
+
+        Requirement.PreviousLifepaths _ ->
+            True
+
+        Requirement.Setting { settingId } ->
+            settingId == lifepath.settingId
+
+        Requirement.Any preds ->
+            NonEmpty.any (mentionedIn lifepath) preds
+
+        Requirement.All preds ->
+            NonEmpty.any (mentionedIn lifepath) preds
 
 
 
