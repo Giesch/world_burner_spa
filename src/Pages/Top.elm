@@ -18,6 +18,7 @@ import Html
 import Html.Attributes
 import Http
 import Json.Decode as Decode
+import List.NonEmpty as NonEmpty exposing (NonEmpty)
 import Model.Lifepath as Lifepath exposing (Lifepath)
 import Model.Lifepath.GenSkills as GenSkills exposing (GenSkills)
 import Model.Lifepath.LifepathIndex as LifepathIndex exposing (LifepathIndex)
@@ -61,9 +62,14 @@ type alias Params =
 type alias Model =
     { searchableLifepaths : Status LifepathIndex
     , name : String
-    , characterLifepaths : ValidPathList
     , dnd : DnDList.Model
     , modalState : Maybe ModalState
+    , worksheet : Maybe Worksheet
+    }
+
+
+type alias Worksheet =
+    { lifepaths : ValidPathList
     }
 
 
@@ -117,7 +123,7 @@ init : Shared.Model -> Url Params -> ( Model, Cmd Msg )
 init shared { params } =
     ( { searchableLifepaths = Status.Loading
       , name = ""
-      , characterLifepaths = Validation.validate []
+      , worksheet = Nothing
       , dnd = system.model
       , modalState = Nothing
       }
@@ -177,23 +183,52 @@ update msg model =
 
         DnDMsg dndMsg ->
             let
-                ( dnd, lifepaths ) =
-                    system.update dndMsg model.dnd <| Validation.unpack model.characterLifepaths
+                ( dnd, lifepathsList ) =
+                    case Maybe.map .lifepaths model.worksheet of
+                        Nothing ->
+                            ( model.dnd, [] )
+
+                        Just validatedLifepaths ->
+                            validatedLifepaths
+                                |> Validation.unpack
+                                |> NonEmpty.toList
+                                |> system.update dndMsg model.dnd
+
+                characterLifepaths =
+                    NonEmpty.fromList lifepathsList
+                        |> Maybe.map Validation.revalidate
+
+                worksheet =
+                    Maybe.map (\lps -> { lifepaths = lps }) characterLifepaths
             in
-            ( { model | dnd = dnd, characterLifepaths = Validation.revalidate lifepaths }
+            ( { model | dnd = dnd, worksheet = worksheet }
             , system.commands dnd
             )
 
         RemoveLifepath index ->
             let
                 unpacked =
-                    Validation.unpack model.characterLifepaths
+                    model.worksheet
+                        |> Maybe.map .lifepaths
+                        |> Maybe.map Validation.unpack
+                        |> Maybe.map NonEmpty.toList
+                        |> Maybe.withDefault []
 
                 lifepaths =
-                    List.take index unpacked
-                        ++ List.drop (index + 1) unpacked
+                    List.take index unpacked ++ List.drop (index + 1) unpacked
+
+                characterLifepaths =
+                    case lifepaths of
+                        [] ->
+                            Nothing
+
+                        first :: rest ->
+                            Just <| Validation.revalidate ( first, rest )
+
+                worksheet =
+                    Maybe.map (\lps -> { lifepaths = lps }) characterLifepaths
             in
-            ( { model | characterLifepaths = Validation.revalidate lifepaths }, Cmd.none )
+            ( { model | worksheet = worksheet }, Cmd.none )
 
         OpenModal modalOption ->
             case model.searchableLifepaths of
@@ -224,25 +259,35 @@ update msg model =
             ( { model | modalState = Nothing }, Cmd.none )
 
         SubmitModal (Just ( addedLifepath, modalState )) ->
-            ( { model
-                | modalState = Nothing
-                , characterLifepaths =
-                    let
-                        unpackedLifepaths : List Lifepath
-                        unpackedLifepaths =
-                            List.map .lifepath (Validation.unpack model.characterLifepaths)
-                    in
+            let
+                unpackedLifepaths : List Lifepath
+                unpackedLifepaths =
+                    model.worksheet
+                        |> Maybe.map .lifepaths
+                        |> Maybe.map Validation.unpack
+                        |> Maybe.map NonEmpty.toList
+                        |> Maybe.withDefault []
+                        |> List.map .lifepath
+
+                characterLifepaths : NonEmpty Lifepath
+                characterLifepaths =
                     case modalState.option of
                         After ->
-                            Validation.validate <| unpackedLifepaths ++ [ addedLifepath ]
+                            Common.appendIntoNonEmpty unpackedLifepaths addedLifepath
 
                         Before ->
-                            Validation.validate <| addedLifepath :: unpackedLifepaths
+                            ( addedLifepath, unpackedLifepaths )
 
                         RequirementAt _ index ->
-                            Validation.validate <|
-                                List.take index unpackedLifepaths
-                                    ++ (addedLifepath :: List.drop index unpackedLifepaths)
+                            Common.insertIntoNonEmpty unpackedLifepaths addedLifepath index
+
+                worksheet =
+                    { lifepaths = Validation.validate <| characterLifepaths
+                    }
+            in
+            ( { model
+                | modalState = Nothing
+                , worksheet = Just worksheet
               }
             , Cmd.none
             )
@@ -404,7 +449,8 @@ view : Model -> Document Msg
 view model =
     let
         unpackedLifepaths =
-            Validation.unpack model.characterLifepaths
+            Maybe.map (NonEmpty.toList << Validation.unpack << .lifepaths) model.worksheet
+                |> Maybe.withDefault []
     in
     { title = "Charred Knockoff"
     , modal = Maybe.map viewModal model.modalState
@@ -423,8 +469,6 @@ view model =
         , viewCharacterLifepaths model
         , el [ paddingEach { edges | right = 20, bottom = 20 }, alignRight ] <|
             faintButton "Add Lifepath" (Just <| OpenModal After)
-
-        -- TODO if there is at least one lifepath, then show the rest of the form
         , ghostView model.dnd unpackedLifepaths
         ]
     }
@@ -433,11 +477,11 @@ view model =
 viewCharacterLifepaths : Model -> Element Msg
 viewCharacterLifepaths model =
     el [ width fill, padding 20 ] <|
-        case Validation.unpack model.characterLifepaths of
-            [] ->
+        case Maybe.map (Validation.unpack << .lifepaths) model.worksheet of
+            Nothing ->
                 none
 
-            lifepaths ->
+            Just lifepaths ->
                 column [ width fill ] <|
                     [ el [ paddingEach { edges | bottom = 20 }, alignRight ] <|
                         faintButton "Add Lifepath" (Just <| OpenModal Before)
@@ -449,7 +493,8 @@ viewCharacterLifepaths model =
                         ]
                       <|
                         column [ width fill ] <|
-                            List.indexedMap (viewDraggableLifepath model.dnd) lifepaths
+                            List.indexedMap (viewDraggableLifepath model.dnd) <|
+                                NonEmpty.toList lifepaths
                     ]
 
 
