@@ -423,6 +423,8 @@ view model =
         , viewCharacterLifepaths model
         , el [ paddingEach { edges | right = 20, bottom = 20 }, alignRight ] <|
             faintButton "Add Lifepath" (Just <| OpenModal After)
+
+        -- TODO if there is at least one lifepath, then show the rest of the form
         , ghostView model.dnd unpackedLifepaths
         ]
     }
@@ -523,7 +525,7 @@ viewModal modalState =
                                 [ Events.onClick <| SelectedModalLifepath i ]
                     in
                     el (baseAttrs ++ additionalAttrs) <|
-                        viewInnerLifepath
+                        viewLifepath
                             { lifepath = lp
                             , dragStyles = []
                             , dropStyles = []
@@ -576,7 +578,7 @@ ghostView dnd lifepaths =
                     ++ [ htmlAttribute <| Html.Attributes.style "width" "auto" ]
                 )
             <|
-                [ dragHandle []
+                [ Components.dragHandle []
                 , text <| toTitleCase lifepath.name
                 , el [ Font.size 18, paddingEach { edges | left = 20 } ] <|
                     (text <| "(" ++ toTitleCase lifepath.settingName ++ ")")
@@ -588,14 +590,7 @@ ghostView dnd lifepaths =
 
 heading : String -> Element Msg
 heading h =
-    el
-        [ width fill
-        , centerX
-        , padding 20
-        , Background.color Colors.faint
-        ]
-    <|
-        text h
+    el [ width fill, padding 20, Background.color Colors.faint ] <| text h
 
 
 type alias DnDStyles =
@@ -637,7 +632,7 @@ viewDraggableLifepath dnd dragIndex { lifepath, warnings } =
         { dragStyles, dropStyles } =
             dndStyles dnd dragIndex
     in
-    viewInnerLifepath
+    viewLifepath
         { dragStyles = dragStyles
         , dropStyles = dropStyles
         , lifepath = lifepath
@@ -647,7 +642,7 @@ viewDraggableLifepath dnd dragIndex { lifepath, warnings } =
         }
 
 
-type alias InnerLifepathOptions =
+type alias LifepathOptions =
     { dropStyles : List (Attribute Msg)
     , dragStyles : List (Attribute Msg)
     , lifepath : Lifepath
@@ -657,178 +652,15 @@ type alias InnerLifepathOptions =
     }
 
 
-viewInnerLifepath : InnerLifepathOptions -> Element Msg
-viewInnerLifepath opts =
-    let
-        isDraggable : Bool
-        isDraggable =
-            case opts.dragIndex of
-                Just _ ->
-                    True
-
-                Nothing ->
-                    False
-    in
-    row
-        ([ width fill
-         , spacing 10
-         , paddingXY 20 20
-         , htmlAttribute <| Html.Attributes.id opts.id
-         ]
-            ++ opts.dropStyles
-        )
-        [ column [ width fill, spacing 5 ] <|
-            [ row [ width fill ]
-                [ if isDraggable then
-                    dragHandle opts.dragStyles
-
-                  else
-                    none
-                , text <| toTitleCase opts.lifepath.name
-                , el [ Font.size 18, paddingEach { edges | left = 20 } ] <|
-                    (text <| "(" ++ toTitleCase opts.lifepath.settingName ++ ")")
-                , el
-                    [ alignTop
-                    , alignLeft
-                    , Components.tooltip above (warningsTooltip opts.warnings.general)
-                    , transparent (List.isEmpty opts.warnings.general)
-                    , paddingEach { edges | left = 20 }
-                    ]
-                    Components.warningIcon
-                ]
-            , textColumn [ width fill, Font.size 18 ]
-                [ row [ width fill, spacing 10, Font.size 18 ]
-                    [ text <| Years.toString opts.lifepath.years
-                    , text <| Resources.toString opts.lifepath.res
-                    , text <| StatMod.toString opts.lifepath.statMod
-                    ]
-                , paragraph [] <|
-                    [ text <| "Skills: "
-                    , GenSkills.toString opts.lifepath.genSkills
-                        |> Maybe.map (\genText -> text (genText ++ ", "))
-                        |> Maybe.withDefault none
-                    , text <| String.fromInt opts.lifepath.skillPts ++ " pts: "
-                    ]
-                        ++ (List.intersperse (text ", ") <|
-                                List.map viewSkill opts.lifepath.skills
-                           )
-                , paragraph [] <|
-                    [ text <| "Traits: "
-                    , text <|
-                        String.fromInt opts.lifepath.traitPts
-                            ++ " pts: "
-                            ++ (String.join ", " <|
-                                    List.map (Trait.name >> toTitleCase)
-                                        opts.lifepath.traits
-                               )
-                    ]
-                , paragraph [ width fill ] <|
-                    [ text "Leads: "
-                    , text <|
-                        String.join ", " <|
-                            List.map (.settingName >> toTitleCase) opts.lifepath.leads
-                    ]
-                , requirementRow opts
-                ]
-            ]
-        , Maybe.map deleteButton opts.dragIndex |> Maybe.withDefault none
-        ]
-
-
-requirementRow : InnerLifepathOptions -> Element Msg
-requirementRow opts =
-    -- this nonsense seems necessary to make the width work in both the modal and the page
-    case ( opts.lifepath.requirement, opts.dragIndex ) of
-        ( Nothing, _ ) ->
-            none
-
-        ( Just requirement, Nothing ) ->
-            row [] <|
-                [ paragraph [] [ text <| "Requires: " ++ requirement.description ]
-                ]
-
-        ( Just requirement, Just dragIndex ) ->
-            row [] <|
-                [ text <| "Requires: " ++ requirement.description
-                , Input.button
-                    [ alignTop
-                    , alignLeft
-                    , paddingEach { edges | left = 20 }
-                    , Components.tooltip above <|
-                        warningsTooltip [ "Satisfy missing lifepath requirement" ]
-                    , transparent opts.warnings.requirementSatisfied
-                    ]
-                    { onPress = Just <| SatisfyRequirement requirement dragIndex
-                    , label = Components.warningIcon
-                    }
-                ]
-
-
-deleteButton : Int -> Element Msg
-deleteButton dragIndex =
-    Input.button
-        [ alignRight, alignTop ]
-        { onPress = Just <| RemoveLifepath dragIndex
-        , label = Components.deleteIcon
+viewLifepath : LifepathOptions -> Element Msg
+viewLifepath opts =
+    Lifepath.view
+        { dragStyles = opts.dragStyles
+        , dropStyles = opts.dropStyles
+        , lifepath = opts.lifepath
+        , id = opts.id
+        , dragIndex = opts.dragIndex
+        , warnings = opts.warnings
+        , onClickRequirement = SatisfyRequirement
+        , onDelete = RemoveLifepath
         }
-
-
-dragHandle : List (Attribute Msg) -> Element Msg
-dragHandle dragStyles =
-    Input.button
-        ([ width <| px 20, height <| px 20 ]
-            ++ Common.userSelectNone
-            ++ dragStyles
-        )
-        { onPress = Nothing
-        , label = text "⠶"
-        }
-
-
-viewSkill : Skill -> Element msg
-viewSkill skill =
-    let
-        suffix : Maybe String
-        suffix =
-            case ( skill.magical, skill.training ) of
-                ( False, False ) ->
-                    Nothing
-
-                ( True, False ) ->
-                    Just "§"
-
-                ( False, True ) ->
-                    Just "†"
-
-                ( True, True ) ->
-                    -- NOTE this doesn't appear in book data
-                    -- but we'll still want another symbol
-                    -- (double dagger is taken by elves)
-                    Just "§"
-    in
-    Element.row [] <|
-        List.filterMap identity
-            [ Just <| Element.text <| Skill.toString skill
-            , Maybe.map Components.superScript suffix
-            ]
-
-
-warningsTooltip : List String -> Element msg
-warningsTooltip warnings =
-    el
-        [ Background.color Colors.white
-        , width fill
-        , height fill
-        , Font.color Colors.black
-        , padding 5
-        , Border.rounded 5
-        , Font.size 16
-        , Border.shadow
-            { offset = ( 0, 3 )
-            , blur = 6
-            , size = 0
-            , color = Colors.shadow
-            }
-        ]
-    <|
-        column [ padding 5, spacing 5, width fill, height fill ] (List.map text warnings)

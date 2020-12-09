@@ -2,10 +2,16 @@ module Model.Lifepath exposing
     ( Lifepath
     , decoder
     , mentionedIn
+    , view
     )
 
-import Colors exposing (..)
+import Colors
+import Common exposing (edges)
+import Components
 import Element exposing (..)
+import Element.Font as Font
+import Element.Input as Input
+import Html.Attributes
 import Json.Decode as Decode exposing (Decoder)
 import Json.Decode.Pipeline exposing (optional, required)
 import List.NonEmpty as NonEmpty exposing (NonEmpty)
@@ -17,6 +23,7 @@ import Model.Lifepath.Skill as Skill exposing (Skill)
 import Model.Lifepath.StatMod as StatMod exposing (StatMod)
 import Model.Lifepath.Trait as Trait exposing (Trait)
 import Model.Lifepath.Years as Years exposing (Years)
+import String.Extra exposing (toTitleCase)
 
 
 type alias Lifepath =
@@ -56,6 +63,172 @@ mentionedIn lifepath predicate =
 
         Requirement.All preds ->
             NonEmpty.any (mentionedIn lifepath) preds
+
+
+type alias Options msg =
+    { -- TODO these 3 should all be Nothing at once
+      dragStyles : List (Attribute msg)
+    , dropStyles : List (Attribute msg)
+    , dragIndex : Maybe Int -- Nothing means not draggable
+    , lifepath : Lifepath
+    , id : String
+    , warnings : Warnings
+    , onClickRequirement : Requirement -> Int -> msg
+    , onDelete : Int -> msg
+    }
+
+
+type alias Warnings =
+    -- TODO come up with a better solution
+    -- this duplicates Validation module to break a dep cycle
+    { general : List String
+    , requirementSatisfied : Bool
+    }
+
+
+view : Options msg -> Element msg
+view opts =
+    let
+        isDraggable : Bool
+        isDraggable =
+            case opts.dragIndex of
+                Just _ ->
+                    True
+
+                Nothing ->
+                    False
+    in
+    row
+        ([ width fill
+         , spacing 10
+         , paddingXY 20 20
+         , htmlAttribute <| Html.Attributes.id opts.id
+         ]
+            ++ opts.dropStyles
+        )
+        [ column [ width fill, spacing 5 ] <|
+            [ row [ width fill ]
+                [ if isDraggable then
+                    Components.dragHandle opts.dragStyles
+
+                  else
+                    none
+                , text <| toTitleCase opts.lifepath.name
+                , el [ Font.size 18, paddingEach { edges | left = 20 } ] <|
+                    (text <| "(" ++ toTitleCase opts.lifepath.settingName ++ ")")
+                , el
+                    [ alignTop
+                    , alignLeft
+                    , Components.tooltip above (Components.warningsTooltip opts.warnings.general)
+                    , transparent (List.isEmpty opts.warnings.general)
+                    , paddingEach { edges | left = 20 }
+                    ]
+                    Components.warningIcon
+                ]
+            , textColumn [ width fill, Font.size 18 ]
+                [ row [ width fill, spacing 10, Font.size 18 ]
+                    [ text <| Years.toString opts.lifepath.years
+                    , text <| Resources.toString opts.lifepath.res
+                    , text <| StatMod.toString opts.lifepath.statMod
+                    ]
+                , paragraph [] <|
+                    [ text <| "Skills: "
+                    , GenSkills.toString opts.lifepath.genSkills
+                        |> Maybe.map (\genText -> text (genText ++ ", "))
+                        |> Maybe.withDefault none
+                    , text <| String.fromInt opts.lifepath.skillPts ++ " pts: "
+                    ]
+                        ++ (List.intersperse (text ", ") <|
+                                List.map viewSkill opts.lifepath.skills
+                           )
+                , paragraph [] <|
+                    [ text <| "Traits: "
+                    , text <|
+                        String.fromInt opts.lifepath.traitPts
+                            ++ " pts: "
+                            ++ (String.join ", " <|
+                                    List.map (Trait.name >> toTitleCase)
+                                        opts.lifepath.traits
+                               )
+                    ]
+                , paragraph [ width fill ] <|
+                    [ text "Leads: "
+                    , text <|
+                        String.join ", " <|
+                            List.map (.settingName >> toTitleCase) opts.lifepath.leads
+                    ]
+                , requirementRow opts
+                ]
+            ]
+        , Maybe.map (deleteButton << opts.onDelete) opts.dragIndex
+            |> Maybe.withDefault none
+        ]
+
+
+requirementRow : Options msg -> Element msg
+requirementRow opts =
+    -- this nonsense seems necessary to make the width work in both the modal and the page
+    case ( opts.lifepath.requirement, opts.dragIndex ) of
+        ( Nothing, _ ) ->
+            none
+
+        ( Just requirement, Nothing ) ->
+            row [] <|
+                [ paragraph [] [ text <| "Requires: " ++ requirement.description ]
+                ]
+
+        ( Just requirement, Just dragIndex ) ->
+            row [] <|
+                [ text <| "Requires: " ++ requirement.description
+                , Input.button
+                    [ alignTop
+                    , alignLeft
+                    , paddingEach { edges | left = 20 }
+                    , Components.tooltip above <|
+                        Components.warningsTooltip [ "Satisfy missing lifepath requirement" ]
+                    , transparent opts.warnings.requirementSatisfied
+                    ]
+                    { onPress = Just <| opts.onClickRequirement requirement dragIndex
+                    , label = Components.warningIcon
+                    }
+                ]
+
+
+deleteButton : msg -> Element msg
+deleteButton onPress =
+    Input.button
+        [ alignRight, alignTop ]
+        { onPress = Just onPress
+        , label = Components.deleteIcon
+        }
+
+
+viewSkill : Skill -> Element msg
+viewSkill skill =
+    let
+        suffix : Maybe String
+        suffix =
+            case ( skill.magical, skill.training ) of
+                ( False, False ) ->
+                    Nothing
+
+                ( True, False ) ->
+                    Just "§"
+
+                ( False, True ) ->
+                    Just "†"
+
+                ( True, True ) ->
+                    -- NOTE this doesn't appear in book data
+                    -- but we'll still want another symbol
+                    -- (double dagger is taken by elves)
+                    Just "§"
+    in
+    Element.row [] <|
+        List.filterMap identity
+            [ Just <| Element.text <| Skill.toString skill
+            , Maybe.map Components.superScript suffix
+            ]
 
 
 
