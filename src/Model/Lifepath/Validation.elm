@@ -1,7 +1,6 @@
 module Model.Lifepath.Validation exposing
     ( ValidPathList
     , ValidatedLifepath
-    , Warnings
     , emptyWarnings
     , revalidate
     , unpack
@@ -10,7 +9,7 @@ module Model.Lifepath.Validation exposing
 
 import Dict exposing (Dict)
 import List.NonEmpty as NonEmpty exposing (NonEmpty)
-import Model.Lifepath exposing (Lifepath)
+import Model.Lifepath as Lifepath exposing (Lifepath)
 import Model.Lifepath.Requirement as Requirement exposing (Predicate, Requirement)
 
 
@@ -25,17 +24,11 @@ unpack (Validated paths) =
 
 type alias ValidatedLifepath =
     { lifepath : Lifepath
-    , warnings : Warnings
+    , warnings : Lifepath.Warnings
     }
 
 
-type alias Warnings =
-    { general : List String
-    , requirementSatisfied : Bool
-    }
-
-
-emptyWarnings : Warnings
+emptyWarnings : Lifepath.Warnings
 emptyWarnings =
     { general = []
     , requirementSatisfied = True
@@ -83,7 +76,7 @@ addMissingBornWarning lifepathWarnings =
             lifepathWarnings
 
 
-addGeneralWarning : String -> Warnings -> Warnings
+addGeneralWarning : String -> Lifepath.Warnings -> Lifepath.Warnings
 addGeneralWarning message warnings =
     { warnings | general = message :: warnings.general }
 

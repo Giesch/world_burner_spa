@@ -1,11 +1,13 @@
 module Model.Lifepath exposing
-    ( Lifepath
+    ( DnDOptions
+    , Lifepath
+    , Options
+    , Warnings
     , decoder
     , mentionedIn
     , view
     )
 
-import Colors
 import Common exposing (edges)
 import Components
 import Element exposing (..)
@@ -66,10 +68,7 @@ mentionedIn lifepath predicate =
 
 
 type alias Options msg =
-    { -- TODO these 3 should all be Nothing at once
-      dragStyles : List (Attribute msg)
-    , dropStyles : List (Attribute msg)
-    , dragIndex : Maybe Int -- Nothing means not draggable
+    { dndOptions : Maybe (DnDOptions msg)
     , lifepath : Lifepath
     , id : String
     , warnings : Warnings
@@ -78,9 +77,14 @@ type alias Options msg =
     }
 
 
+type alias DnDOptions msg =
+    { dragStyles : List (Attribute msg)
+    , dropStyles : List (Attribute msg)
+    , dragIndex : Int
+    }
+
+
 type alias Warnings =
-    -- TODO come up with a better solution
-    -- this duplicates Validation module to break a dep cycle
     { general : List String
     , requirementSatisfied : Bool
     }
@@ -89,30 +93,30 @@ type alias Warnings =
 view : Options msg -> Element msg
 view opts =
     let
-        isDraggable : Bool
-        isDraggable =
-            case opts.dragIndex of
-                Just _ ->
-                    True
+        baseAttrs =
+            [ width fill
+            , spacing 10
+            , paddingXY 20 20
+            , htmlAttribute <| Html.Attributes.id opts.id
+            ]
+
+        attrs =
+            case opts.dndOptions of
+                Just { dropStyles } ->
+                    baseAttrs ++ dropStyles
 
                 Nothing ->
-                    False
+                    baseAttrs
     in
-    row
-        ([ width fill
-         , spacing 10
-         , paddingXY 20 20
-         , htmlAttribute <| Html.Attributes.id opts.id
-         ]
-            ++ opts.dropStyles
-        )
+    row attrs
         [ column [ width fill, spacing 5 ] <|
             [ row [ width fill ]
-                [ if isDraggable then
-                    Components.dragHandle opts.dragStyles
+                [ case opts.dndOptions of
+                    Just { dragStyles } ->
+                        Components.dragHandle dragStyles
 
-                  else
-                    none
+                    Nothing ->
+                        none
                 , text <| toTitleCase opts.lifepath.name
                 , el [ Font.size 18, paddingEach { edges | left = 20 } ] <|
                     (text <| "(" ++ toTitleCase opts.lifepath.settingName ++ ")")
@@ -160,15 +164,19 @@ view opts =
                 , requirementRow opts
                 ]
             ]
-        , Maybe.map (deleteButton << opts.onDelete) opts.dragIndex
-            |> Maybe.withDefault none
+        , case opts.dndOptions of
+            Just { dragIndex } ->
+                deleteButton <| opts.onDelete dragIndex
+
+            Nothing ->
+                none
         ]
 
 
 requirementRow : Options msg -> Element msg
 requirementRow opts =
     -- this nonsense seems necessary to make the width work in both the modal and the page
-    case ( opts.lifepath.requirement, opts.dragIndex ) of
+    case ( opts.lifepath.requirement, opts.dndOptions ) of
         ( Nothing, _ ) ->
             none
 
@@ -177,7 +185,7 @@ requirementRow opts =
                 [ paragraph [] [ text <| "Requires: " ++ requirement.description ]
                 ]
 
-        ( Just requirement, Just dragIndex ) ->
+        ( Just requirement, Just { dragIndex } ) ->
             row [] <|
                 [ text <| "Requires: " ++ requirement.description
                 , Input.button

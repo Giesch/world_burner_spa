@@ -527,11 +527,9 @@ viewModal modalState =
                     el (baseAttrs ++ additionalAttrs) <|
                         viewLifepath
                             { lifepath = lp
-                            , dragStyles = []
-                            , dropStyles = []
                             , id = "search-result-lp-" ++ String.fromInt i
-                            , dragIndex = Nothing
                             , warnings = Validation.emptyWarnings
+                            , dndOptions = Nothing
                             }
                 )
                 modalState.filteredPaths
@@ -631,35 +629,32 @@ viewDraggableLifepath dnd dragIndex { lifepath, warnings } =
     let
         { dragStyles, dropStyles } =
             dndStyles dnd dragIndex
+
+        dndOptions =
+            { dragIndex = dragIndex, dragStyles = dragStyles, dropStyles = dropStyles }
     in
     viewLifepath
-        { dragStyles = dragStyles
-        , dropStyles = dropStyles
+        { dndOptions = Just dndOptions
         , lifepath = lifepath
         , id = dndId dragIndex
-        , dragIndex = Just dragIndex
         , warnings = warnings
         }
 
 
 type alias LifepathOptions =
-    { dropStyles : List (Attribute Msg)
-    , dragStyles : List (Attribute Msg)
+    { dndOptions : Maybe (Lifepath.DnDOptions Msg)
     , lifepath : Lifepath
     , id : String
-    , dragIndex : Maybe Int -- Nothing means not draggable
-    , warnings : Validation.Warnings
+    , warnings : Lifepath.Warnings
     }
 
 
 viewLifepath : LifepathOptions -> Element Msg
 viewLifepath opts =
     Lifepath.view
-        { dragStyles = opts.dragStyles
-        , dropStyles = opts.dropStyles
+        { dndOptions = opts.dndOptions
         , lifepath = opts.lifepath
         , id = opts.id
-        , dragIndex = opts.dragIndex
         , warnings = opts.warnings
         , onClickRequirement = SatisfyRequirement
         , onDelete = RemoveLifepath
