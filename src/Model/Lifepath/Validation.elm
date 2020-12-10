@@ -2,7 +2,6 @@ module Model.Lifepath.Validation exposing
     ( ValidPathList
     , ValidatedLifepath
     , emptyWarnings
-    , revalidate
     , unpack
     , validate
     )
@@ -33,11 +32,6 @@ emptyWarnings =
     { general = []
     , requirementSatisfied = True
     }
-
-
-revalidate : NonEmpty ValidatedLifepath -> ValidPathList
-revalidate validations =
-    validate <| NonEmpty.map .lifepath validations
 
 
 validate : NonEmpty Lifepath -> ValidPathList
@@ -184,15 +178,24 @@ initialSummary first =
     { lifepathIdCounts = Dict.empty
     , settingIdCounts = Dict.empty
     , totalLifepaths = 0
-    , validated = NonEmpty.singleton <| markFirstRequirement first
+    , validated = NonEmpty.singleton <| checkFirstRequirement first
     }
 
 
-markFirstRequirement : ValidatedLifepath -> ValidatedLifepath
-markFirstRequirement { lifepath, warnings } =
+checkFirstRequirement : ValidatedLifepath -> ValidatedLifepath
+checkFirstRequirement { lifepath, warnings } =
+    let
+        satisfied =
+            case lifepath.requirement of
+                Just _ ->
+                    False
+
+                Nothing ->
+                    True
+    in
     { lifepath = lifepath
     , warnings =
         { general = warnings.general
-        , requirementSatisfied = False
+        , requirementSatisfied = satisfied
         }
     }
