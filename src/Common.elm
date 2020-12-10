@@ -1,6 +1,8 @@
 module Common exposing
-    ( clamp
+    ( appendIntoNonEmpty
+    , clamp
     , edges
+    , insertIntoNonEmpty
     , onEnter
     , pairDecoder
     , swap
@@ -11,6 +13,7 @@ import Element
 import Html.Attributes
 import Html.Events
 import Json.Decode as Decode exposing (Decoder)
+import List.NonEmpty as NonEmpty exposing (NonEmpty)
 
 
 edges : { left : Int, right : Int, top : Int, bottom : Int }
@@ -26,6 +29,35 @@ swap ( a, b ) =
 clamp : ( comparable, comparable ) -> comparable -> comparable
 clamp ( minimum, maximum ) val =
     min (max val minimum) maximum
+
+
+appendIntoNonEmpty : List a -> a -> NonEmpty a
+appendIntoNonEmpty list item =
+    case list of
+        [] ->
+            NonEmpty.singleton item
+
+        first :: rest ->
+            ( first, rest ++ [ item ] )
+
+
+insertIntoNonEmpty : List a -> a -> Int -> NonEmpty a
+insertIntoNonEmpty list item index =
+    let
+        prefix : List a
+        prefix =
+            List.take index list
+
+        suffix : List a
+        suffix =
+            List.drop index list
+    in
+    case prefix of
+        [] ->
+            ( item, suffix )
+
+        first :: rest ->
+            ( first, rest ++ item :: suffix )
 
 
 pairDecoder : Decoder a -> Decoder b -> Decoder ( a, b )

@@ -1,59 +1,45 @@
 module Model.Lifepath.Validation exposing
     ( ValidPathList
     , ValidatedLifepath
-    , Warnings
     , emptyWarnings
-    , revalidate
     , unpack
     , validate
     )
 
 import Dict exposing (Dict)
 import List.NonEmpty as NonEmpty exposing (NonEmpty)
-import Model.Lifepath exposing (Lifepath)
+import Model.Lifepath as Lifepath exposing (Lifepath)
 import Model.Lifepath.Requirement as Requirement exposing (Predicate, Requirement)
 
 
 type ValidPathList
-    = Validated (List ValidatedLifepath)
+    = Validated (NonEmpty ValidatedLifepath)
 
 
-unpack : ValidPathList -> List ValidatedLifepath
+unpack : ValidPathList -> NonEmpty ValidatedLifepath
 unpack (Validated paths) =
     paths
 
 
 type alias ValidatedLifepath =
     { lifepath : Lifepath
-    , warnings : Warnings
+    , warnings : Lifepath.Warnings
     }
 
 
-type alias Warnings =
-    { general : List String
-    , requirementSatisfied : Bool
-    }
-
-
-emptyWarnings : Warnings
+emptyWarnings : Lifepath.Warnings
 emptyWarnings =
     { general = []
     , requirementSatisfied = True
     }
 
 
-revalidate : List ValidatedLifepath -> ValidPathList
-revalidate validations =
-    validate <| List.map .lifepath validations
-
-
-validate : List Lifepath -> ValidPathList
+validate : NonEmpty Lifepath -> ValidPathList
 validate lifepaths =
     let
-        initialPairs : List ValidatedLifepath
+        initialPairs : NonEmpty ValidatedLifepath
         initialPairs =
-            List.map2 ValidatedLifepath lifepaths <|
-                List.repeat (List.length lifepaths) emptyWarnings
+            NonEmpty.map withEmptyWarnings lifepaths
     in
     initialPairs
         |> addMissingBornWarning
@@ -62,34 +48,35 @@ validate lifepaths =
         |> Validated
 
 
-addMissingBornWarning : List ValidatedLifepath -> List ValidatedLifepath
-addMissingBornWarning lifepathWarnings =
+withEmptyWarnings : Lifepath -> ValidatedLifepath
+withEmptyWarnings lifepath =
+    { lifepath = lifepath, warnings = emptyWarnings }
+
+
+addMissingBornWarning : NonEmpty ValidatedLifepath -> NonEmpty ValidatedLifepath
+addMissingBornWarning (( { lifepath, warnings }, rest ) as lifepathWarnings) =
     let
         message =
             "A character's first lifepath must be a Born lifepath"
     in
-    case lifepathWarnings of
-        { lifepath, warnings } :: rest ->
-            if lifepath.born then
-                lifepathWarnings
+    if lifepath.born then
+        lifepathWarnings
 
-            else
-                { lifepath = lifepath
-                , warnings = addGeneralWarning message warnings
-                }
-                    :: rest
-
-        _ ->
-            lifepathWarnings
+    else
+        ( { lifepath = lifepath
+          , warnings = addGeneralWarning message warnings
+          }
+        , rest
+        )
 
 
-addGeneralWarning : String -> Warnings -> Warnings
+addGeneralWarning : String -> Lifepath.Warnings -> Lifepath.Warnings
 addGeneralWarning message warnings =
     { warnings | general = message :: warnings.general }
 
 
-addMisplacedBornWarning : List ValidatedLifepath -> List ValidatedLifepath
-addMisplacedBornWarning lifepathWarnings =
+addMisplacedBornWarning : NonEmpty ValidatedLifepath -> NonEmpty ValidatedLifepath
+addMisplacedBornWarning ( first, rest ) =
     let
         message =
             "Only a character's first lifepath can be a born lifepath"
@@ -101,18 +88,13 @@ addMisplacedBornWarning lifepathWarnings =
             else
                 { lifepath = lifepath, warnings = warnings }
     in
-    case lifepathWarnings of
-        first :: rest ->
-            first :: List.map requireNonBorn rest
-
-        _ ->
-            lifepathWarnings
+    ( first, List.map requireNonBorn rest )
 
 
-checkRequirements : List ValidatedLifepath -> List ValidatedLifepath
-checkRequirements lifepaths =
-    List.foldl checkPath initial lifepaths
-        |> (.validated >> List.reverse)
+checkRequirements : NonEmpty ValidatedLifepath -> NonEmpty ValidatedLifepath
+checkRequirements ( first, rest ) =
+    List.foldl checkPath (initialSummary first) rest
+        |> .validated
 
 
 checkPath : ValidatedLifepath -> Summary -> Summary
@@ -169,7 +151,7 @@ addLifepath pair data =
     , settingIdCounts =
         Dict.update pair.lifepath.settingId increment data.settingIdCounts
     , totalLifepaths = 1 + data.totalLifepaths
-    , validated = pair :: data.validated
+    , validated = NonEmpty.append data.validated (NonEmpty.singleton pair)
     }
 
 
@@ -187,14 +169,33 @@ type alias Summary =
     { lifepathIdCounts : Dict Int Int
     , settingIdCounts : Dict Int Int
     , totalLifepaths : Int
-    , validated : List ValidatedLifepath
+    , validated : NonEmpty ValidatedLifepath
     }
 
 
-initial : Summary
-initial =
+initialSummary : ValidatedLifepath -> Summary
+initialSummary first =
     { lifepathIdCounts = Dict.empty
     , settingIdCounts = Dict.empty
     , totalLifepaths = 0
-    , validated = []
+    , validated = NonEmpty.singleton <| checkFirstRequirement first
+    }
+
+
+checkFirstRequirement : ValidatedLifepath -> ValidatedLifepath
+checkFirstRequirement { lifepath, warnings } =
+    let
+        satisfied =
+            case lifepath.requirement of
+                Just _ ->
+                    False
+
+                Nothing ->
+                    True
+    in
+    { lifepath = lifepath
+    , warnings =
+        { general = warnings.general
+        , requirementSatisfied = satisfied
+        }
     }
