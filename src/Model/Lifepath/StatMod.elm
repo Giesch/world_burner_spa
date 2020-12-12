@@ -1,4 +1,12 @@
-module Model.Lifepath.StatMod exposing (StatMod, decoder, toString)
+module Model.Lifepath.StatMod exposing
+    ( Bonus
+    , StatMod
+    , addBonus
+    , bonus
+    , decoder
+    , noBonus
+    , toString
+    )
 
 import Json.Decode as Decode exposing (Decoder)
 import Model.NonZero as NonZero exposing (NonZero)
@@ -10,6 +18,45 @@ type StatMod
     | Either NonZero
     | Both NonZero
     | None
+
+
+type alias Bonus =
+    { physical : Int
+    , mental : Int
+    , either : Int
+    }
+
+
+noBonus : Bonus
+noBonus =
+    { physical = 0, mental = 0, either = 0 }
+
+
+addBonus : Bonus -> Bonus -> Bonus
+addBonus left right =
+    { physical = left.physical + right.physical
+    , mental = left.mental + right.mental
+    , either = left.either + right.either
+    }
+
+
+bonus : StatMod -> Bonus
+bonus statMod =
+    case statMod of
+        Physical nz ->
+            { noBonus | physical = NonZero.toInt nz }
+
+        Mental nz ->
+            { noBonus | mental = NonZero.toInt nz }
+
+        Either nz ->
+            { noBonus | either = NonZero.toInt nz }
+
+        Both nz ->
+            { noBonus | physical = NonZero.toInt nz, mental = NonZero.toInt nz }
+
+        None ->
+            noBonus
 
 
 toString : StatMod -> String

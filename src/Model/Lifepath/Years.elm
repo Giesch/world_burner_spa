@@ -27,13 +27,14 @@ toString years =
 age : List Years -> Int
 age list =
     let
+        toInt : Years -> Int
         toInt yrs =
             case yrs of
                 Count count ->
                     count
 
-                Range ( _, max ) ->
-                    max
+                Range ( min, _ ) ->
+                    min
     in
     List.sum <| List.map toInt list
 

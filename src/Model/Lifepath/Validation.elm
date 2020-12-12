@@ -1,9 +1,9 @@
 module Model.Lifepath.Validation exposing
-    ( ValidPathList
-    , ValidatedLifepath
+    ( PathWithWarnings
+    , ValidatedLifepaths
+    , addWarnings
     , emptyWarnings
     , unpack
-    , validate
     )
 
 import Dict exposing (Dict)
@@ -12,16 +12,16 @@ import Model.Lifepath as Lifepath exposing (Lifepath)
 import Model.Lifepath.Requirement as Requirement exposing (Predicate, Requirement)
 
 
-type ValidPathList
-    = Validated (NonEmpty ValidatedLifepath)
+type ValidatedLifepaths
+    = Validated (NonEmpty PathWithWarnings)
 
 
-unpack : ValidPathList -> NonEmpty ValidatedLifepath
+unpack : ValidatedLifepaths -> NonEmpty PathWithWarnings
 unpack (Validated paths) =
     paths
 
 
-type alias ValidatedLifepath =
+type alias PathWithWarnings =
     { lifepath : Lifepath
     , warnings : Lifepath.Warnings
     }
@@ -34,10 +34,10 @@ emptyWarnings =
     }
 
 
-validate : NonEmpty Lifepath -> ValidPathList
-validate lifepaths =
+addWarnings : NonEmpty Lifepath -> ValidatedLifepaths
+addWarnings lifepaths =
     let
-        initialPairs : NonEmpty ValidatedLifepath
+        initialPairs : NonEmpty PathWithWarnings
         initialPairs =
             NonEmpty.map withEmptyWarnings lifepaths
     in
@@ -48,12 +48,12 @@ validate lifepaths =
         |> Validated
 
 
-withEmptyWarnings : Lifepath -> ValidatedLifepath
+withEmptyWarnings : Lifepath -> PathWithWarnings
 withEmptyWarnings lifepath =
     { lifepath = lifepath, warnings = emptyWarnings }
 
 
-addMissingBornWarning : NonEmpty ValidatedLifepath -> NonEmpty ValidatedLifepath
+addMissingBornWarning : NonEmpty PathWithWarnings -> NonEmpty PathWithWarnings
 addMissingBornWarning (( { lifepath, warnings }, rest ) as lifepathWarnings) =
     let
         message =
@@ -75,7 +75,7 @@ addGeneralWarning message warnings =
     { warnings | general = message :: warnings.general }
 
 
-addMisplacedBornWarning : NonEmpty ValidatedLifepath -> NonEmpty ValidatedLifepath
+addMisplacedBornWarning : NonEmpty PathWithWarnings -> NonEmpty PathWithWarnings
 addMisplacedBornWarning ( first, rest ) =
     let
         message =
@@ -91,28 +91,28 @@ addMisplacedBornWarning ( first, rest ) =
     ( first, List.map requireNonBorn rest )
 
 
-checkRequirements : NonEmpty ValidatedLifepath -> NonEmpty ValidatedLifepath
+checkRequirements : NonEmpty PathWithWarnings -> NonEmpty PathWithWarnings
 checkRequirements ( first, rest ) =
     List.foldl checkPath (initialSummary first) rest
         |> .validated
 
 
-checkPath : ValidatedLifepath -> Summary -> Summary
+checkPath : PathWithWarnings -> Summary -> Summary
 checkPath pair data =
     case pair.lifepath.requirement of
         Nothing ->
             addLifepath pair data
 
         Just requirement ->
-            if satisfies requirement.predicate data then
+            if satisfies data requirement.predicate then
                 addLifepath pair data
 
             else
                 addLifepathWithWarning pair data
 
 
-satisfies : Predicate -> Summary -> Bool
-satisfies pred data =
+satisfies : Summary -> Predicate -> Bool
+satisfies data pred =
     let
         hasAtLeast count id dict =
             Dict.get id dict
@@ -130,13 +130,13 @@ satisfies pred data =
             hasAtLeast count settingId data.settingIdCounts
 
         Requirement.Any preds ->
-            NonEmpty.any (\p -> satisfies p data) preds
+            NonEmpty.any (satisfies data) preds
 
         Requirement.All preds ->
-            NonEmpty.all (\p -> satisfies p data) preds
+            NonEmpty.all (satisfies data) preds
 
 
-addLifepathWithWarning : ValidatedLifepath -> Summary -> Summary
+addLifepathWithWarning : PathWithWarnings -> Summary -> Summary
 addLifepathWithWarning { lifepath, warnings } =
     addLifepath
         { lifepath = lifepath
@@ -144,7 +144,7 @@ addLifepathWithWarning { lifepath, warnings } =
         }
 
 
-addLifepath : ValidatedLifepath -> Summary -> Summary
+addLifepath : PathWithWarnings -> Summary -> Summary
 addLifepath pair data =
     { lifepathIdCounts =
         Dict.update pair.lifepath.id increment data.lifepathIdCounts
@@ -169,11 +169,11 @@ type alias Summary =
     { lifepathIdCounts : Dict Int Int
     , settingIdCounts : Dict Int Int
     , totalLifepaths : Int
-    , validated : NonEmpty ValidatedLifepath
+    , validated : NonEmpty PathWithWarnings
     }
 
 
-initialSummary : ValidatedLifepath -> Summary
+initialSummary : PathWithWarnings -> Summary
 initialSummary first =
     { lifepathIdCounts = Dict.empty
     , settingIdCounts = Dict.empty
@@ -182,7 +182,7 @@ initialSummary first =
     }
 
 
-checkFirstRequirement : ValidatedLifepath -> ValidatedLifepath
+checkFirstRequirement : PathWithWarnings -> PathWithWarnings
 checkFirstRequirement { lifepath, warnings } =
     let
         satisfied =

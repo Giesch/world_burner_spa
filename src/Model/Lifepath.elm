@@ -175,22 +175,26 @@ view opts =
 
 requirementRow : Options msg -> Element msg
 requirementRow opts =
-    -- this nonsense seems necessary to make the width work in both the modal and the page
     case ( opts.lifepath.requirement, opts.dndOptions ) of
         ( Nothing, _ ) ->
             none
 
         ( Just requirement, Nothing ) ->
+            -- used in modal
             row [] <|
                 [ paragraph [] [ text <| "Requires: " ++ requirement.description ]
                 ]
 
         ( Just requirement, Just { dragIndex } ) ->
+            -- used in dnd list
+            -- This is weird because putting a tooltip in a paragraph breaks its box
             row [] <|
-                [ text <| "Requires: " ++ requirement.description
+                [ paragraph [ width (fill |> maximum 500) ]
+                    [ text <| "Requires: " ++ requirement.description ]
                 , Input.button
                     [ alignTop
                     , alignLeft
+                    , width shrink
                     , paddingEach { edges | left = 20 }
                     , Components.tooltip above <|
                         Components.warningsTooltip [ "Satisfy missing lifepath requirement" ]

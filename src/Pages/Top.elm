@@ -14,7 +14,6 @@ import Element.Border as Border
 import Element.Events as Events
 import Element.Font as Font
 import Element.Input as Input
-import Html
 import Html.Attributes
 import Http
 import Json.Decode as Decode
@@ -27,7 +26,7 @@ import Model.Lifepath.Resources as Resources exposing (Resources)
 import Model.Lifepath.Skill as Skill exposing (Skill)
 import Model.Lifepath.StatMod as StatMod exposing (StatMod)
 import Model.Lifepath.Trait as Trait exposing (Trait)
-import Model.Lifepath.Validation as Validation exposing (ValidPathList, ValidatedLifepath)
+import Model.Lifepath.Validation as Validation exposing (PathWithWarnings, ValidatedLifepaths)
 import Model.Lifepath.Years as Years exposing (Years)
 import Model.Status as Status exposing (Status)
 import Model.Worksheet as Worksheet exposing (Worksheet)
@@ -101,12 +100,12 @@ applyOptionFilter option =
             identity
 
 
-system : DnDList.System ValidatedLifepath Msg
+system : DnDList.System PathWithWarnings Msg
 system =
     DnDList.create dndConfig DnDMsg
 
 
-dndConfig : DnDList.Config ValidatedLifepath
+dndConfig : DnDList.Config PathWithWarnings
 dndConfig =
     { beforeUpdate = \_ _ list -> list
     , movement = DnDList.Free
@@ -425,29 +424,61 @@ view model =
     { title = "Charred Knockoff"
     , modal = Maybe.map viewModal model.modalState
     , body =
-        [ heading "Character"
-        , row [ padding 20, spacing 20 ]
-            [ Input.text []
-                { onChange = EnteredName
-                , text = model.name
-                , placeholder = Nothing
-                , label = Input.labelAbove [] <| text "Name:"
-                }
-            , text <| "Age: " ++ String.fromInt (Years.age <| List.map (.lifepath >> .years) unpackedLifepaths)
-            ]
-        , heading "Lifepaths"
-        , viewCharacterLifepaths model
-        , el [ paddingEach { edges | right = 20, bottom = 20 }, alignRight ] <|
-            faintButton "Add Lifepath" (Just <| OpenModal After)
-        , ghostView model.dnd unpackedLifepaths
-        ]
+        viewCharacterAndLifepaths model
+            ++ (model.worksheet |> Maybe.map viewWorksheet |> Maybe.withDefault [])
+            -- NOTE  this has to be last
+            ++ [ ghostView model.dnd unpackedLifepaths ]
     }
 
 
-viewCharacterLifepaths : Model -> Element Msg
-viewCharacterLifepaths model =
+viewCharacterAndLifepaths : Model -> List (Element Msg)
+viewCharacterAndLifepaths model =
+    [ heading "Character"
+    , row [ padding 20, spacing 20 ]
+        [ Input.text []
+            { onChange = EnteredName
+            , text = model.name
+            , placeholder = Nothing
+            , label = Input.labelAbove [] <| text "Name:"
+            }
+        , text <| "Age: " ++ viewAge model.worksheet
+        ]
+    , heading "Lifepaths"
+    , viewCharacterLifepaths model.worksheet model.dnd
+    , el [ paddingEach { edges | right = 20, bottom = 20 }, alignRight ] <|
+        faintButton "Add Lifepath" (Just <| OpenModal After)
+    ]
+
+
+viewAge : Maybe Worksheet -> String
+viewAge maybeSheet =
+    maybeSheet
+        |> Maybe.map Worksheet.age
+        |> Maybe.withDefault 0
+        |> String.fromInt
+
+
+viewWorksheet : Worksheet -> List (Element Msg)
+viewWorksheet worksheet =
+    let
+        remaining : (StatMod.Bonus -> Int) -> String
+        remaining prop =
+            String.fromInt <| prop <| Worksheet.statsRemaining worksheet
+    in
+    [ heading "Stats and Attributes"
+    , paragraph [ Font.size 18, padding 20 ]
+        [ text "Remaining: "
+        , text <| "physical: " ++ remaining .physical
+        , text <| ", mental: " ++ remaining .mental
+        , text <| ", either: " ++ remaining .either
+        ]
+    ]
+
+
+viewCharacterLifepaths : Maybe Worksheet -> DnDList.Model -> Element Msg
+viewCharacterLifepaths worksheet dnd =
     el [ width fill, padding 20 ] <|
-        case Maybe.map Worksheet.lifepaths model.worksheet of
+        case Maybe.map Worksheet.lifepaths worksheet of
             Nothing ->
                 none
 
@@ -463,7 +494,7 @@ viewCharacterLifepaths model =
                         ]
                       <|
                         column [ width fill ] <|
-                            List.indexedMap (viewDraggableLifepath model.dnd) <|
+                            List.indexedMap (viewDraggableLifepath dnd) <|
                                 lifepaths
                     ]
 
@@ -562,10 +593,10 @@ viewModal modalState =
         ]
 
 
-ghostView : DnDList.Model -> List Validation.ValidatedLifepath -> Element Msg
+ghostView : DnDList.Model -> List PathWithWarnings -> Element Msg
 ghostView dnd lifepaths =
     let
-        draggedPath : Maybe Validation.ValidatedLifepath
+        draggedPath : Maybe PathWithWarnings
         draggedPath =
             system.info dnd
                 |> Maybe.andThen
@@ -639,7 +670,7 @@ dndId index =
     "lp-drag-" ++ String.fromInt index
 
 
-viewDraggableLifepath : DnDList.Model -> Int -> ValidatedLifepath -> Element Msg
+viewDraggableLifepath : DnDList.Model -> Int -> PathWithWarnings -> Element Msg
 viewDraggableLifepath dnd dragIndex { lifepath, warnings } =
     let
         { dragStyles, dropStyles } =

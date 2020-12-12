@@ -51,7 +51,7 @@ warningsTooltip warnings =
             }
         ]
     <|
-        column [ padding 5, spacing 5, width fill, height fill ] (List.map text warnings)
+        textColumn [ padding 5, spacing 5, width fill, height fill ] (List.map text warnings)
 
 
 tooltip : (Element msg -> Attribute msg) -> Element Never -> Attribute msg
@@ -63,8 +63,7 @@ tooltip position tooltipElem =
             , transparent True
             , mouseOver [ transparent False ]
             , (position << Element.map never) <|
-                el [ htmlAttribute (Html.Attributes.style "pointerEvents" "none") ]
-                    tooltipElem
+                el [ htmlAttribute (Html.Attributes.style "pointerEvents" "none") ] tooltipElem
             ]
             none
 
