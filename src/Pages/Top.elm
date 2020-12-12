@@ -30,6 +30,7 @@ import Model.Lifepath.Validation as Validation exposing (PathWithWarnings, Valid
 import Model.Lifepath.Years as Years exposing (Years)
 import Model.Status as Status exposing (Status)
 import Model.Worksheet as Worksheet exposing (Worksheet)
+import Model.Worksheet.Stat as Stat exposing (Stat)
 import Process
 import Shared
 import Spa.Document exposing (Document)
@@ -137,11 +138,12 @@ type Msg
     | RemoveLifepath Int
     | OpenModal ModalOption
     | SatisfyRequirement Requirement Int
-    | SubmitModal (Maybe ( Lifepath, ModalState ))
+    | SubmitModal (Maybe ( ModalOption, Lifepath ))
     | EnteredModalSearchText String
     | SearchTimePassed String
     | SelectedModalLifepath Int
     | ArrowPress Direction
+    | ChangeStat Stat Int
     | NoOp
 
 
@@ -233,7 +235,7 @@ update msg model =
         SubmitModal Nothing ->
             ( { model | modalState = Nothing }, Cmd.none )
 
-        SubmitModal (Just ( addedLifepath, modalState )) ->
+        SubmitModal (Just ( option, addedLifepath )) ->
             let
                 unpackedLifepaths : List Lifepath
                 unpackedLifepaths =
@@ -244,7 +246,7 @@ update msg model =
 
                 characterLifepaths : NonEmpty Lifepath
                 characterLifepaths =
-                    case modalState.option of
+                    case option of
                         After ->
                             Common.appendIntoNonEmpty unpackedLifepaths addedLifepath
 
@@ -290,6 +292,11 @@ update msg model =
 
         ArrowPress direction ->
             updateModal (handleArrow direction) model
+
+        ChangeStat stat val ->
+            ( { model | worksheet = Maybe.map (Worksheet.changeStat stat val) model.worksheet }
+            , Cmd.none
+            )
 
 
 handleArrow : Direction -> ModalState -> ( ModalState, Cmd Msg )
@@ -463,15 +470,63 @@ viewWorksheet worksheet =
     let
         remaining : (StatMod.Bonus -> Int) -> String
         remaining prop =
-            String.fromInt <| prop <| Worksheet.statsRemaining worksheet
+            worksheet
+                |> Worksheet.statsRemaining
+                |> Tuple.mapBoth prop prop
+                |> Tuple.mapBoth String.fromInt String.fromInt
+                |> (\( rem, total ) -> rem ++ "/" ++ total)
+
+        stats : Worksheet.Stats
+        stats =
+            Worksheet.stats worksheet
+
+        statRows =
+            [ { value = stats.will, stat = Stat.Will }
+            , { value = stats.perception, stat = Stat.Perception }
+            , { value = stats.power, stat = Stat.Power }
+            , { value = stats.forte, stat = Stat.Forte }
+            , { value = stats.agility, stat = Stat.Agility }
+            , { value = stats.speed, stat = Stat.Speed }
+            ]
     in
     [ heading "Stats and Attributes"
     , paragraph [ Font.size 18, padding 20 ]
         [ text "Remaining: "
-        , text <| "physical: " ++ remaining .physical
-        , text <| ", mental: " ++ remaining .mental
+        , text <| "mental: " ++ remaining .mental
+        , text <| ", physical: " ++ remaining .physical
         , text <| ", either: " ++ remaining .either
         ]
+    , table [ Font.size 18, spacing 5, padding 20 ]
+        { data = statRows
+        , columns =
+            [ { header = none
+              , width = px 100
+              , view = text << Stat.toString << .stat
+              }
+            , { header = none
+              , width = shrink
+              , view = text << String.fromInt << .value
+              }
+            , { header = none
+              , width = shrink
+              , view =
+                    \row ->
+                        Input.button []
+                            { onPress = Just <| ChangeStat row.stat (row.value + 1)
+                            , label = text "+"
+                            }
+              }
+            , { header = none
+              , width = shrink
+              , view =
+                    \row ->
+                        Input.button []
+                            { onPress = Just <| ChangeStat row.stat (row.value - 1)
+                            , label = text "-"
+                            }
+              }
+            ]
+        }
     ]
 
 
@@ -525,9 +580,9 @@ viewModal modalState =
             List.drop modalState.selectedLifepath modalState.filteredPaths
                 |> List.head
 
-        submission : Maybe ( Lifepath, ModalState )
+        submission : Maybe ( ModalOption, Lifepath )
         submission =
-            Maybe.map (Tuple.pair modalState >> Common.swap) selectedLifepath
+            Maybe.map (Tuple.pair modalState.option) selectedLifepath
     in
     column
         [ width (fill |> minimum 600)

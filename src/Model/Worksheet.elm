@@ -2,9 +2,11 @@ module Model.Worksheet exposing
     ( Stats
     , Worksheet
     , age
+    , changeStat
     , lifepaths
     , new
     , replaceLifepaths
+    , stats
     , statsRemaining
     , updateLifepaths
     )
@@ -12,11 +14,13 @@ module Model.Worksheet exposing
 {-| A module for the data that the user can edit after choosing lifepaths.
 -}
 
+import Common
 import List.NonEmpty as NonEmpty exposing (NonEmpty)
 import Model.Lifepath as Lifepath exposing (Lifepath)
 import Model.Lifepath.StatMod as StatMod exposing (StatMod)
 import Model.Lifepath.Validation as Validation exposing (PathWithWarnings, ValidatedLifepaths)
 import Model.Lifepath.Years as Years
+import Model.Worksheet.Stat as Stat exposing (Stat)
 
 
 type Worksheet
@@ -26,7 +30,7 @@ type Worksheet
 type alias WorksheetData =
     { lifepaths : ValidatedLifepaths
     , age : Int
-    , statsRemaining : StatMod.Bonus
+    , statsRemaining : ( StatMod.Bonus, StatMod.Bonus )
     , stats : Stats
     }
 
@@ -36,9 +40,14 @@ age (Worksheet sheet) =
     sheet.age
 
 
-statsRemaining : Worksheet -> StatMod.Bonus
+statsRemaining : Worksheet -> ( StatMod.Bonus, StatMod.Bonus )
 statsRemaining (Worksheet sheet) =
     sheet.statsRemaining
+
+
+stats : Worksheet -> Stats
+stats (Worksheet sheet) =
+    sheet.stats
 
 
 type alias Stats =
@@ -88,6 +97,88 @@ replaceLifepaths paths (Worksheet sheet) =
         |> Maybe.map new
 
 
+changeStat : Stat -> Int -> Worksheet -> Worksheet
+changeStat stat val (Worksheet sheet) =
+    let
+        clampedVal =
+            if val < 1 then
+                1
+
+            else
+                val
+
+        currentStats =
+            sheet.stats
+
+        updatedStats =
+            case stat of
+                Stat.Will ->
+                    { currentStats | will = clampedVal }
+
+                Stat.Perception ->
+                    { currentStats | perception = clampedVal }
+
+                Stat.Power ->
+                    { currentStats | power = clampedVal }
+
+                Stat.Forte ->
+                    { currentStats | forte = clampedVal }
+
+                Stat.Agility ->
+                    { currentStats | agility = clampedVal }
+
+                Stat.Speed ->
+                    { currentStats | speed = clampedVal }
+
+        updatedRemaining =
+            recalculateSpentStats updatedStats <| Tuple.second sheet.statsRemaining
+    in
+    Worksheet
+        { sheet
+            | stats = updatedStats
+            , statsRemaining = updatedRemaining
+        }
+
+
+recalculateSpentStats : Stats -> StatMod.Bonus -> ( StatMod.Bonus, StatMod.Bonus )
+recalculateSpentStats currentStats total =
+    let
+        subtractStats : StatMod.Bonus -> StatMod.Bonus
+        subtractStats current =
+            { mental = current.mental - (currentStats.will + currentStats.perception)
+            , physical =
+                current.physical
+                    - List.sum
+                        [ currentStats.power
+                        , currentStats.forte
+                        , currentStats.agility
+                        , currentStats.speed
+                        ]
+            , either = current.either
+            }
+
+        spendEitherOnMental : StatMod.Bonus -> StatMod.Bonus
+        spendEitherOnMental current =
+            { mental = max 0 current.mental
+            , physical = current.physical
+            , either = current.either + min 0 current.mental
+            }
+
+        spendEitherOnPhysical : StatMod.Bonus -> StatMod.Bonus
+        spendEitherOnPhysical current =
+            { mental = current.mental
+            , physical = max 0 current.physical
+            , either = current.either + min 0 current.physical
+            }
+    in
+    ( total
+        |> subtractStats
+        |> spendEitherOnMental
+        |> spendEitherOnPhysical
+    , total
+    )
+
+
 new : NonEmpty Lifepath -> Worksheet
 new paths =
     Worksheet <| newData paths
@@ -100,14 +191,29 @@ newData paths =
         newAge =
             sumAge paths
 
-        remaining : StatMod.Bonus
-        remaining =
+        totalStats : StatMod.Bonus
+        totalStats =
             StatMod.addBonus (ageStats newAge) (lifepathBonuses paths)
+
+        initialStatsRemaining : ( StatMod.Bonus, StatMod.Bonus )
+        initialStatsRemaining =
+            recalculateSpentStats allOnes totalStats
     in
     { lifepaths = Validation.addWarnings paths
     , age = newAge
-    , statsRemaining = remaining
-    , stats = zeroStats
+    , statsRemaining = initialStatsRemaining
+    , stats = allOnes
+    }
+
+
+allOnes : Stats
+allOnes =
+    { will = 1
+    , perception = 1
+    , power = 1
+    , forte = 1
+    , agility = 1
+    , speed = 1
     }
 
 
@@ -141,7 +247,7 @@ lifepathBonuses : NonEmpty Lifepath -> StatMod.Bonus
 lifepathBonuses =
     let
         sumBonus path bonus =
-            StatMod.addBonus bonus <| StatMod.bonus <| path.statMod
+            StatMod.addBonus bonus <| StatMod.bonus path.statMod
     in
     NonEmpty.foldl sumBonus StatMod.noBonus
 
@@ -158,72 +264,72 @@ dwarfAgeTable : List AgeTableRow
 dwarfAgeTable =
     [ { minAge = 1
       , maxAge = 20
-      , physical = 6
-      , mental = 13
+      , mental = 6
+      , physical = 13
       }
     , { minAge = 21
       , maxAge = 30
-      , physical = 7
-      , mental = 13
+      , mental = 7
+      , physical = 13
       }
     , { minAge = 31
       , maxAge = 50
-      , physical = 7
-      , mental = 14
+      , mental = 7
+      , physical = 14
       }
     , { minAge = 51
       , maxAge = 76
-      , physical = 8
-      , mental = 15
+      , mental = 8
+      , physical = 15
       }
     , { minAge = 77
       , maxAge = 111
-      , physical = 8
-      , mental = 16
+      , mental = 8
+      , physical = 16
       }
     , { minAge = 112
       , maxAge = 151
-      , physical = 9
-      , mental = 16
+      , mental = 9
+      , physical = 16
       }
     , { minAge = 152
       , maxAge = 199
-      , physical = 9
-      , mental = 17
+      , mental = 9
+      , physical = 17
       }
     , { minAge = 200
       , maxAge = 245
-      , physical = 10
-      , mental = 18
+      , mental = 10
+      , physical = 18
       }
     , { minAge = 246
       , maxAge = 300
-      , physical = 11
-      , mental = 17
+      , mental = 11
+      , physical = 17
       }
     , { minAge = 301
       , maxAge = 345
-      , physical = 11
-      , mental = 16
+      , mental = 11
+      , physical = 16
       }
     , { minAge = 346
       , maxAge = 396
-      , physical = 12
-      , mental = 15
+      , mental = 12
+      , physical = 15
       }
     , { minAge = 397
       , maxAge = 445
-      , physical = 11
-      , mental = 14
+      , mental = 11
+      , physical = 14
       }
     , { minAge = 446
       , maxAge = 525
-      , physical = 11
-      , mental = 13
+      , mental = 11
+      , physical = 13
       }
     , { minAge = 526
       , maxAge = 600
-      , physical = 10
-      , mental = 12
+      , mental = 10
+      , physical = 12
       }
     ]
