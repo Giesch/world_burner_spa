@@ -41,23 +41,20 @@ addWarnings lifepaths =
     let
         initialPairs : NonEmpty PathWithWarnings
         initialPairs =
-            NonEmpty.map withEmptyWarnings lifepaths
+            NonEmpty.map
+                (\lp -> { lifepath = lp, warnings = emptyWarnings })
+                lifepaths
     in
     initialPairs
-        |> addMissingBornWarning
-        |> addMisplacedBornWarning
+        |> checkMissingBorn
+        |> checkMisplacedBorn
         |> checkRequirements
         |> checkLeads
         |> Validated
 
 
-withEmptyWarnings : Lifepath -> PathWithWarnings
-withEmptyWarnings lifepath =
-    { lifepath = lifepath, warnings = emptyWarnings }
-
-
-addMissingBornWarning : NonEmpty PathWithWarnings -> NonEmpty PathWithWarnings
-addMissingBornWarning (( { lifepath, warnings }, rest ) as lifepathWarnings) =
+checkMissingBorn : NonEmpty PathWithWarnings -> NonEmpty PathWithWarnings
+checkMissingBorn (( { lifepath, warnings }, rest ) as lifepathWarnings) =
     let
         message =
             "A character's first lifepath must be a Born lifepath"
@@ -66,9 +63,7 @@ addMissingBornWarning (( { lifepath, warnings }, rest ) as lifepathWarnings) =
         lifepathWarnings
 
     else
-        ( { lifepath = lifepath
-          , warnings = addGeneralWarning message warnings
-          }
+        ( { lifepath = lifepath, warnings = addGeneralWarning message warnings }
         , rest
         )
 
@@ -78,8 +73,8 @@ addGeneralWarning message warnings =
     { warnings | general = message :: warnings.general }
 
 
-addMisplacedBornWarning : NonEmpty PathWithWarnings -> NonEmpty PathWithWarnings
-addMisplacedBornWarning ( first, rest ) =
+checkMisplacedBorn : NonEmpty PathWithWarnings -> NonEmpty PathWithWarnings
+checkMisplacedBorn ( first, rest ) =
     let
         message =
             "Only a character's first lifepath can be a born lifepath"
@@ -117,6 +112,7 @@ checkPath pair data =
 satisfies : Summary -> Predicate -> Bool
 satisfies data pred =
     let
+        hasAtLeast : Int -> Int -> Dict Int Int -> Bool
         hasAtLeast count id dict =
             Dict.get id dict
                 |> Maybe.map (\n -> n >= count)

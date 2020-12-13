@@ -224,24 +224,31 @@ recalculateSpentStats currentStats total =
             , either = current.either
             }
 
-        spendEitherOnMental : StatMod.Bonus -> StatMod.Bonus
-        spendEitherOnMental current =
-            { mental = max 0 current.mental
-            , physical = current.physical
-            , either = current.either + min 0 current.mental
-            }
+        spendEither : StatMod.Bonus -> StatMod.Bonus
+        spendEither current =
+            if current.either <= 0 then
+                current
 
-        spendEitherOnPhysical : StatMod.Bonus -> StatMod.Bonus
-        spendEitherOnPhysical current =
-            { mental = current.mental
-            , physical = max 0 current.physical
-            , either = current.either + min 0 current.physical
-            }
+            else if current.mental < 0 then
+                spendEither
+                    { mental = current.mental + 1
+                    , physical = current.physical
+                    , either = current.either - 1
+                    }
+
+            else if current.physical < 0 then
+                spendEither
+                    { mental = current.mental
+                    , physical = current.physical + 1
+                    , either = current.either - 1
+                    }
+
+            else
+                current
     in
     ( total
         |> subtractStats
-        |> spendEitherOnMental
-        |> spendEitherOnPhysical
+        |> spendEither
     , total
     )
 

@@ -81,9 +81,7 @@ type alias ModalState =
 newModal : LifepathIndex -> ModalOption -> ModalState
 newModal lifepathIndex option =
     { searchText = ""
-    , filteredPaths =
-        applyOptionFilter option <|
-            LifepathIndex.lifepaths lifepathIndex
+    , filteredPaths = applyOptionFilter option <| LifepathIndex.lifepaths lifepathIndex
     , lifepathIndex = lifepathIndex
     , selectedLifepath = 0
     , option = option
