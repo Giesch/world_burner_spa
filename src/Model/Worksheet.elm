@@ -3,6 +3,7 @@ module Model.Worksheet exposing
     , Worksheet
     , age
     , changeStat
+    , distributeStats
     , lifepaths
     , new
     , replaceLifepaths
@@ -14,7 +15,6 @@ module Model.Worksheet exposing
 {-| A module for the data that the user can edit after choosing lifepaths.
 -}
 
-import Common
 import List.NonEmpty as NonEmpty exposing (NonEmpty)
 import Model.Lifepath as Lifepath exposing (Lifepath)
 import Model.Lifepath.StatMod as StatMod exposing (StatMod)
@@ -78,23 +78,90 @@ lifepaths (Worksheet sheet) =
         |> NonEmpty.toList
 
 
-updateLifepaths :
-    (List PathWithWarnings -> List PathWithWarnings)
-    -> Worksheet
-    -> Maybe Worksheet
-updateLifepaths update workSheet =
+updateLifepaths : (List Lifepath -> List Lifepath) -> Worksheet -> Maybe Worksheet
+updateLifepaths updateFn workSheet =
     workSheet
         |> lifepaths
-        |> update
-        |> (\paths -> replaceLifepaths paths workSheet)
-
-
-replaceLifepaths : List PathWithWarnings -> Worksheet -> Maybe Worksheet
-replaceLifepaths paths (Worksheet sheet) =
-    paths
         |> List.map .lifepath
+        |> updateFn
         |> NonEmpty.fromList
-        |> Maybe.map new
+        |> Maybe.map (\paths -> replaceLifepaths paths workSheet)
+
+
+replaceLifepaths : NonEmpty Lifepath -> Worksheet -> Worksheet
+replaceLifepaths paths (Worksheet sheet) =
+    let
+        lifepathData : LifepathData
+        lifepathData =
+            recalculateLifepathData sheet.stats paths
+    in
+    Worksheet
+        { sheet
+            | lifepaths = lifepathData.lifepaths
+            , age = lifepathData.age
+            , statsRemaining = lifepathData.statsRemaining
+        }
+
+
+distributeStats : Worksheet -> Worksheet
+distributeStats (Worksheet sheet) =
+    let
+        totals : StatMod.Bonus
+        totals =
+            Tuple.second sheet.statsRemaining
+
+        updatedStats =
+            zeroStats
+                |> distributeMental totals.mental
+                |> distributePhysical totals.physical
+
+        updatedRemaining =
+            ( StatMod.noBonus, Tuple.second sheet.statsRemaining )
+    in
+    Worksheet { sheet | stats = updatedStats, statsRemaining = updatedRemaining }
+
+
+distributeMental : Int -> Stats -> Stats
+distributeMental points current =
+    if points > 0 then
+        if current.will <= current.perception then
+            distributeMental (points - 1)
+                { current | will = current.will + 1 }
+
+        else
+            distributeMental (points - 1)
+                { current | perception = current.perception + 1 }
+
+    else
+        current
+
+
+distributePhysical : Int -> Stats -> Stats
+distributePhysical points current =
+    let
+        lowest : Int
+        lowest =
+            List.minimum [ current.power, current.forte, current.agility, current.speed ]
+                |> Maybe.withDefault 0
+    in
+    if points > 0 then
+        if current.power == lowest then
+            distributePhysical (points - 1) { current | power = current.power + 1 }
+
+        else if current.forte == lowest then
+            distributePhysical (points - 1) { current | forte = current.forte + 1 }
+
+        else if current.agility == lowest then
+            distributePhysical (points - 1) { current | agility = current.agility + 1 }
+
+        else if current.speed == lowest then
+            distributePhysical (points - 1) { current | speed = current.speed + 1 }
+
+        else
+            current
+
+    else
+        current
 
 
 changeStat : Stat -> Int -> Worksheet -> Worksheet
@@ -187,6 +254,28 @@ new paths =
 newData : NonEmpty Lifepath -> WorksheetData
 newData paths =
     let
+        lifepathData =
+            recalculateLifepathData allOnes paths
+    in
+    { lifepaths = lifepathData.lifepaths
+    , age = lifepathData.age
+    , statsRemaining = lifepathData.statsRemaining
+    , stats = allOnes
+    }
+
+
+{-| Lifepaths and data calculated directly from lifepaths.
+-}
+type alias LifepathData =
+    { lifepaths : ValidatedLifepaths
+    , age : Int
+    , statsRemaining : ( StatMod.Bonus, StatMod.Bonus )
+    }
+
+
+recalculateLifepathData : Stats -> NonEmpty Lifepath -> LifepathData
+recalculateLifepathData currentStats paths =
+    let
         newAge : Int
         newAge =
             sumAge paths
@@ -195,14 +284,13 @@ newData paths =
         totalStats =
             StatMod.addBonus (ageStats newAge) (lifepathBonuses paths)
 
-        initialStatsRemaining : ( StatMod.Bonus, StatMod.Bonus )
-        initialStatsRemaining =
-            recalculateSpentStats allOnes totalStats
+        recalculatedStatsRemaining : ( StatMod.Bonus, StatMod.Bonus )
+        recalculatedStatsRemaining =
+            recalculateSpentStats currentStats totalStats
     in
     { lifepaths = Validation.addWarnings paths
     , age = newAge
-    , statsRemaining = initialStatsRemaining
-    , stats = allOnes
+    , statsRemaining = recalculatedStatsRemaining
     }
 
 

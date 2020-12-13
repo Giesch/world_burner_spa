@@ -175,8 +175,8 @@ type alias Summary =
 
 initialSummary : PathWithWarnings -> Summary
 initialSummary first =
-    { lifepathIdCounts = Dict.insert first.lifepath.id 1 Dict.empty
-    , settingIdCounts = Dict.insert first.lifepath.settingId 1 Dict.empty
+    { lifepathIdCounts = Dict.fromList [ ( first.lifepath.id, 1 ) ]
+    , settingIdCounts = Dict.fromList [ ( first.lifepath.settingId, 1 ) ]
     , totalLifepaths = 1
     , validated = NonEmpty.singleton <| checkFirstRequirement first
     }

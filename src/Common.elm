@@ -1,11 +1,11 @@
 module Common exposing
     ( appendIntoNonEmpty
     , clamp
+    , corners
     , edges
     , insertIntoNonEmpty
     , onEnter
     , pairDecoder
-    , swap
     , userSelectNone
     )
 
@@ -21,9 +21,9 @@ edges =
     { left = 0, right = 0, top = 0, bottom = 0 }
 
 
-swap : ( a, b ) -> ( b, a )
-swap ( a, b ) =
-    ( b, a )
+corners : { topLeft : Int, topRight : Int, bottomLeft : Int, bottomRight : Int }
+corners =
+    { topLeft = 0, topRight = 0, bottomLeft = 0, bottomRight = 0 }
 
 
 clamp : ( comparable, comparable ) -> comparable -> comparable

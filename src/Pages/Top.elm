@@ -4,7 +4,7 @@ import Api
 import Browser.Dom
 import Browser.Events
 import Colors
-import Common exposing (edges)
+import Common exposing (corners, edges)
 import Components
 import Dict exposing (Dict)
 import DnDList
@@ -144,6 +144,7 @@ type Msg
     | SelectedModalLifepath Int
     | ArrowPress Direction
     | ChangeStat Stat Int
+    | DistributeStats
     | NoOp
 
 
@@ -189,7 +190,8 @@ update msg model =
                             system.update dndMsg model.dnd paths
 
                 worksheet =
-                    Maybe.andThen (Worksheet.replaceLifepaths lifepaths)
+                    Maybe.map2 Worksheet.replaceLifepaths
+                        (NonEmpty.fromList <| List.map .lifepath lifepaths)
                         model.worksheet
             in
             ( { model | dnd = dnd, worksheet = worksheet }
@@ -258,7 +260,11 @@ update msg model =
             in
             ( { model
                 | modalState = Nothing
-                , worksheet = Just <| Worksheet.new characterLifepaths
+                , worksheet =
+                    model.worksheet
+                        |> Maybe.map (Worksheet.replaceLifepaths characterLifepaths)
+                        |> Maybe.withDefault (Worksheet.new characterLifepaths)
+                        |> Just
               }
             , Cmd.none
             )
@@ -294,9 +300,19 @@ update msg model =
             updateModal (handleArrow direction) model
 
         ChangeStat stat val ->
-            ( { model | worksheet = Maybe.map (Worksheet.changeStat stat val) model.worksheet }
+            ( updateWorksheet (Worksheet.changeStat stat val) model
             , Cmd.none
             )
+
+        DistributeStats ->
+            ( updateWorksheet Worksheet.distributeStats model
+            , Cmd.none
+            )
+
+
+updateWorksheet : (Worksheet -> Worksheet) -> Model -> Model
+updateWorksheet fn model =
+    { model | worksheet = Maybe.map fn model.worksheet }
 
 
 handleArrow : Direction -> ModalState -> ( ModalState, Cmd Msg )
@@ -480,13 +496,14 @@ viewWorksheet worksheet =
         stats =
             Worksheet.stats worksheet
 
+        statRows : List StatRow
         statRows =
-            [ { value = stats.will, stat = Stat.Will }
-            , { value = stats.perception, stat = Stat.Perception }
-            , { value = stats.power, stat = Stat.Power }
-            , { value = stats.forte, stat = Stat.Forte }
-            , { value = stats.agility, stat = Stat.Agility }
-            , { value = stats.speed, stat = Stat.Speed }
+            [ { stat = Stat.Will, value = stats.will }
+            , { stat = Stat.Perception, value = stats.perception }
+            , { stat = Stat.Power, value = stats.power }
+            , { stat = Stat.Forte, value = stats.forte }
+            , { stat = Stat.Agility, value = stats.agility }
+            , { stat = Stat.Speed, value = stats.speed }
             ]
     in
     [ heading "Stats and Attributes"
@@ -496,6 +513,8 @@ viewWorksheet worksheet =
         , text <| ", physical: " ++ remaining .physical
         , text <| ", either: " ++ remaining .either
         ]
+    , el [ paddingXY 20 0 ] <|
+        faintButton "Distribute" (Just DistributeStats)
     , table [ Font.size 18, spacing 5, padding 20 ]
         { data = statRows
         , columns =
@@ -509,25 +528,49 @@ viewWorksheet worksheet =
               }
             , { header = none
               , width = shrink
-              , view =
-                    \row ->
-                        Input.button []
-                            { onPress = Just <| ChangeStat row.stat (row.value + 1)
-                            , label = text "+"
-                            }
-              }
-            , { header = none
-              , width = shrink
-              , view =
-                    \row ->
-                        Input.button []
-                            { onPress = Just <| ChangeStat row.stat (row.value - 1)
-                            , label = text "-"
-                            }
+              , view = changeStatButtons
               }
             ]
         }
     ]
+
+
+type alias StatRow =
+    { stat : Stat
+    , value : Int
+    }
+
+
+changeStatButtons : StatRow -> Element Msg
+changeStatButtons statRow =
+    let
+        buttonStyles : List (Attribute Msg)
+        buttonStyles =
+            [ Border.color Colors.shadow
+            , Font.size 14
+            , padding 3
+            ]
+    in
+    row []
+        [ Input.button
+            ([ Border.roundEach { corners | topLeft = 3, bottomLeft = 3 }
+             , Border.widthEach { left = 1, top = 1, bottom = 1, right = 0 }
+             ]
+                ++ buttonStyles
+            )
+            { onPress = Just <| ChangeStat statRow.stat (statRow.value + 1)
+            , label = text "+"
+            }
+        , Input.button
+            ([ Border.roundEach { corners | topRight = 3, bottomRight = 3 }
+             , Border.widthEach { left = 1, top = 1, bottom = 1, right = 1 }
+             ]
+                ++ buttonStyles
+            )
+            { onPress = Just <| ChangeStat statRow.stat (statRow.value - 1)
+            , label = text "-"
+            }
+        ]
 
 
 viewCharacterLifepaths : Maybe Worksheet -> DnDList.Model -> Element Msg
@@ -557,10 +600,10 @@ viewCharacterLifepaths worksheet dnd =
 faintButton : String -> Maybe Msg -> Element Msg
 faintButton label onPress =
     Input.button
-        [ alignRight
-        , Background.color Colors.faint
+        [ Background.color Colors.faint
         , Border.rounded 8
         , paddingXY 15 10
+        , Font.size 18
         ]
         { onPress = onPress
         , label = text label
@@ -635,12 +678,12 @@ viewModal modalState =
                 )
                 modalState.filteredPaths
         , row
-            [ width fill
-            , height fill
+            [ height fill
             , Border.rounded 8
             , Background.color Colors.white
             , spacing 20
             , padding 20
+            , alignRight
             ]
             [ faintButton "Cancel" <| Just (SubmitModal Nothing)
             , faintButton "Add" <| Just (SubmitModal submission)
