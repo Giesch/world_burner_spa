@@ -6,6 +6,7 @@ module Model.Lifepath.Validation exposing
     , unpack
     )
 
+import Common
 import Dict exposing (Dict)
 import List.NonEmpty as NonEmpty exposing (NonEmpty)
 import Model.Lifepath as Lifepath exposing (Lifepath)
@@ -30,6 +31,7 @@ type alias PathWithWarnings =
 emptyWarnings : Lifepath.Warnings
 emptyWarnings =
     { general = []
+    , hasLead = True
     , requirementSatisfied = True
     }
 
@@ -45,6 +47,7 @@ addWarnings lifepaths =
         |> addMissingBornWarning
         |> addMisplacedBornWarning
         |> checkRequirements
+        |> checkLeads
         |> Validated
 
 
@@ -195,7 +198,50 @@ checkFirstRequirement { lifepath, warnings } =
     in
     { lifepath = lifepath
     , warnings =
-        { general = warnings.general
-        , requirementSatisfied = satisfied
+        { emptyWarnings
+            | general = warnings.general
+            , requirementSatisfied = satisfied
         }
     }
+
+
+checkLeads : NonEmpty PathWithWarnings -> NonEmpty PathWithWarnings
+checkLeads ( first, rest ) =
+    let
+        initial : NonEmpty PathWithWarnings
+        initial =
+            NonEmpty.singleton <| leadWarning first <| List.head rest
+    in
+    List.foldl checkLeadPair initial <| Common.overlappingPairs rest
+
+
+checkLeadPair :
+    ( PathWithWarnings, Maybe PathWithWarnings )
+    -> NonEmpty PathWithWarnings
+    -> NonEmpty PathWithWarnings
+checkLeadPair ( current, next ) paths =
+    NonEmpty.append paths <| NonEmpty.singleton <| leadWarning current next
+
+
+leadWarning : PathWithWarnings -> Maybe PathWithWarnings -> PathWithWarnings
+leadWarning current maybeNext =
+    let
+        currentWarnings =
+            current.warnings
+    in
+    case maybeNext of
+        Just next ->
+            if leadSatisfied current.lifepath next.lifepath then
+                current
+
+            else
+                { current | warnings = { currentWarnings | hasLead = False } }
+
+        Nothing ->
+            current
+
+
+leadSatisfied : Lifepath -> Lifepath -> Bool
+leadSatisfied current next =
+    (current.settingId == next.settingId)
+        || (List.member next.settingId <| List.map .settingId current.leads)

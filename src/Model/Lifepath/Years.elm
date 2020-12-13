@@ -1,6 +1,7 @@
 module Model.Lifepath.Years exposing
     ( Years
     , age
+    , count
     , decoder
     , toString
     )
@@ -12,6 +13,11 @@ import Json.Decode as Decode exposing (Decoder)
 type Years
     = Count Int
     | Range ( Int, Int )
+
+
+count : Int -> Years
+count c =
+    Count c
 
 
 toString : Years -> String
@@ -30,8 +36,8 @@ age list =
         toInt : Years -> Int
         toInt yrs =
             case yrs of
-                Count count ->
-                    count
+                Count c ->
+                    c
 
                 Range ( min, _ ) ->
                     min

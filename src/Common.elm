@@ -5,6 +5,7 @@ module Common exposing
     , edges
     , insertIntoNonEmpty
     , onEnter
+    , overlappingPairs
     , pairDecoder
     , userSelectNone
     )
@@ -24,6 +25,19 @@ edges =
 corners : { topLeft : Int, topRight : Int, bottomLeft : Int, bottomRight : Int }
 corners =
     { topLeft = 0, topRight = 0, bottomLeft = 0, bottomRight = 0 }
+
+
+overlappingPairs : List a -> List ( a, Maybe a )
+overlappingPairs list =
+    case list of
+        [] ->
+            []
+
+        first :: [] ->
+            [ ( first, Nothing ) ]
+
+        first :: second :: rest ->
+            ( first, Just second ) :: overlappingPairs (second :: rest)
 
 
 clamp : ( comparable, comparable ) -> comparable -> comparable

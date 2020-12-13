@@ -86,6 +86,7 @@ type alias DnDOptions msg =
 
 type alias Warnings =
     { general : List String
+    , hasLead : Bool
     , requirementSatisfied : Bool
     }
 
@@ -93,6 +94,7 @@ type alias Warnings =
 view : Options msg -> Element msg
 view opts =
     let
+        baseAttrs : List (Attribute msg)
         baseAttrs =
             [ width fill
             , spacing 10
@@ -100,6 +102,7 @@ view opts =
             , htmlAttribute <| Html.Attributes.id opts.id
             ]
 
+        attrs : List (Attribute msg)
         attrs =
             case opts.dndOptions of
                 Just { dropStyles } ->
@@ -123,7 +126,8 @@ view opts =
                 , el
                     [ alignTop
                     , alignLeft
-                    , Components.tooltip above (Components.warningsTooltip opts.warnings.general)
+                    , Components.tooltip above <|
+                        Components.warningsTooltip opts.warnings.general
                     , transparent (List.isEmpty opts.warnings.general)
                     , paddingEach { edges | left = 20 }
                     ]
@@ -134,6 +138,7 @@ view opts =
                     [ text <| Years.toString opts.lifepath.years
                     , text <| Resources.toString opts.lifepath.res
                     , text <| StatMod.toString opts.lifepath.statMod
+                    , leadsRow opts
                     ]
                 , paragraph [] <|
                     [ text <| "Skills: "
@@ -145,7 +150,7 @@ view opts =
                         ++ (List.intersperse (text ", ") <|
                                 List.map viewSkill opts.lifepath.skills
                            )
-                , paragraph [] <|
+                , paragraph []
                     [ text <| "Traits: "
                     , text <|
                         String.fromInt opts.lifepath.traitPts
@@ -154,12 +159,6 @@ view opts =
                                     List.map (Trait.name >> toTitleCase)
                                         opts.lifepath.traits
                                )
-                    ]
-                , paragraph [ width fill ] <|
-                    [ text "Leads: "
-                    , text <|
-                        String.join ", " <|
-                            List.map (.settingName >> toTitleCase) opts.lifepath.leads
                     ]
                 , requirementRow opts
                 ]
@@ -173,6 +172,38 @@ view opts =
         ]
 
 
+leadsRow : Options msg -> Element msg
+leadsRow opts =
+    let
+        leadList : String
+        leadList =
+            "Leads: "
+                ++ (String.join ", " <|
+                        List.map (.settingName >> toTitleCase) opts.lifepath.leads
+                   )
+    in
+    case opts.dndOptions of
+        Nothing ->
+            text leadList
+
+        Just { dragIndex } ->
+            row []
+                [ text leadList
+                , Input.button
+                    [ alignTop
+                    , alignLeft
+                    , width shrink
+                    , paddingEach { edges | left = 20 }
+                    , Components.tooltip above <|
+                        Components.warningsTooltip [ "Missing lead" ]
+                    , transparent opts.warnings.hasLead
+                    ]
+                    { onPress = Nothing
+                    , label = Components.warningIcon
+                    }
+                ]
+
+
 requirementRow : Options msg -> Element msg
 requirementRow opts =
     case ( opts.lifepath.requirement, opts.dndOptions ) of
@@ -181,14 +212,12 @@ requirementRow opts =
 
         ( Just requirement, Nothing ) ->
             -- used in modal
-            row [] <|
-                [ paragraph [] [ text <| "Requires: " ++ requirement.description ]
-                ]
+            row [] [ paragraph [] [ text <| "Requires: " ++ requirement.description ] ]
 
         ( Just requirement, Just { dragIndex } ) ->
             -- used in dnd list
             -- This is weird because putting a tooltip in a paragraph breaks its box
-            row [] <|
+            row []
                 [ paragraph [ width (fill |> maximum 500) ]
                     [ text <| "Requires: " ++ requirement.description ]
                 , Input.button

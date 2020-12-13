@@ -1,6 +1,7 @@
 module Model.Lifepath.GenSkills exposing
     ( GenSkills
     , decoder
+    , points
     , toString
     )
 
@@ -14,6 +15,11 @@ type GenSkills
 
 type GenSkillCalc
     = OnePerYear
+
+
+points : Int -> GenSkills
+points pts =
+    Points pts
 
 
 toString : GenSkills -> Maybe String

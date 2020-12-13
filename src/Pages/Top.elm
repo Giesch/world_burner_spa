@@ -519,7 +519,7 @@ viewWorksheet worksheet =
         { data = statRows
         , columns =
             [ { header = none
-              , width = px 100
+              , width = shrink
               , view = text << Stat.toString << .stat
               }
             , { header = none
@@ -592,8 +592,7 @@ viewCharacterLifepaths worksheet dnd =
                         ]
                       <|
                         column [ width fill ] <|
-                            List.indexedMap (viewDraggableLifepath dnd) <|
-                                lifepaths
+                            List.indexedMap (viewDraggableLifepath dnd) lifepaths
                     ]
 
 
@@ -707,17 +706,17 @@ ghostView dnd lifepaths =
     case draggedPath of
         Just { lifepath } ->
             row
-                ([ Background.color Colors.white
-                 , Border.color Colors.faint
-                 , Border.rounded 8
-                 , Border.width 1
-                 , width shrink
-                 , height (fill |> maximum 50)
-                 , padding 20
-                 ]
-                    ++ (List.map htmlAttribute <| system.ghostStyles dnd)
-                    -- NOTE order matters for this; we need our style to override ghostStyles
-                    ++ [ htmlAttribute <| Html.Attributes.style "width" "auto" ]
+                ((List.map htmlAttribute <| system.ghostStyles dnd)
+                    -- NOTE order matters for this; we need the width to override ghostStyles
+                    ++ [ Background.color Colors.white
+                       , Border.color Colors.faint
+                       , Border.rounded 8
+                       , Border.width 1
+                       , width shrink
+                       , height (fill |> maximum 50)
+                       , padding 20
+                       , htmlAttribute <| Html.Attributes.style "width" "auto"
+                       ]
                 )
             <|
                 [ Components.dragHandle []

@@ -5,6 +5,7 @@ module Model.Lifepath.StatMod exposing
     , bonus
     , decoder
     , noBonus
+    , none
     , toString
     )
 
@@ -18,6 +19,11 @@ type StatMod
     | Either NonZero
     | Both NonZero
     | None
+
+
+none : StatMod
+none =
+    None
 
 
 type alias Bonus =

@@ -1,4 +1,9 @@
-module Model.Lifepath.Resources exposing (Resources, decoder, toString)
+module Model.Lifepath.Resources exposing
+    ( Resources
+    , decoder
+    , points
+    , toString
+    )
 
 import Json.Decode as Decode exposing (Decoder)
 
@@ -6,6 +11,11 @@ import Json.Decode as Decode exposing (Decoder)
 type Resources
     = Points Int
     | Calc ResCalc
+
+
+points : Int -> Resources
+points pts =
+    Points pts
 
 
 type ResCalc
