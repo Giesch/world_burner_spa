@@ -9,6 +9,7 @@ module Model.Worksheet exposing
     , replaceLifepaths
     , stats
     , statsRemaining
+    , toggleShade
     , updateLifepaths
     )
 
@@ -50,24 +51,52 @@ stats (Worksheet sheet) =
     sheet.stats
 
 
-type alias Stats =
-    { will : Int
-    , perception : Int
-    , power : Int
-    , forte : Int
-    , agility : Int
-    , speed : Int
+type alias StatWithShade =
+    { value : Int
+    , shade : Stat.Shade
     }
+
+
+type alias Stats =
+    { will : StatWithShade
+    , perception : StatWithShade
+    , power : StatWithShade
+    , forte : StatWithShade
+    , agility : StatWithShade
+    , speed : StatWithShade
+    }
+
+
+statWithShade : Stat -> Stats -> StatWithShade
+statWithShade stat sheetStats =
+    case stat of
+        Stat.Will ->
+            sheetStats.will
+
+        Stat.Perception ->
+            sheetStats.perception
+
+        Stat.Power ->
+            sheetStats.power
+
+        Stat.Forte ->
+            sheetStats.forte
+
+        Stat.Agility ->
+            sheetStats.agility
+
+        Stat.Speed ->
+            sheetStats.speed
 
 
 zeroStats : Stats
 zeroStats =
-    { will = 0
-    , perception = 0
-    , power = 0
-    , forte = 0
-    , agility = 0
-    , speed = 0
+    { will = { value = 0, shade = Stat.Black }
+    , perception = { value = 0, shade = Stat.Black }
+    , power = { value = 0, shade = Stat.Black }
+    , forte = { value = 0, shade = Stat.Black }
+    , agility = { value = 0, shade = Stat.Black }
+    , speed = { value = 0, shade = Stat.Black }
     }
 
 
@@ -124,16 +153,30 @@ distributeStats (Worksheet sheet) =
 distributeMental : Int -> Stats -> Stats
 distributeMental points current =
     if points > 0 then
-        if current.will <= current.perception then
+        if current.will.value <= current.perception.value then
             distributeMental (points - 1)
-                { current | will = current.will + 1 }
+                { current | will = updateStat current.will (current.will.value + 1) }
 
         else
             distributeMental (points - 1)
-                { current | perception = current.perception + 1 }
+                { current
+                    | perception =
+                        updateStat current.perception
+                            (current.perception.value + 1)
+                }
 
     else
         current
+
+
+updateStat : StatWithShade -> Int -> StatWithShade
+updateStat stat value =
+    { stat | value = value }
+
+
+updateShade : StatWithShade -> Stat.Shade -> StatWithShade
+updateShade stat shade =
+    { stat | shade = shade }
 
 
 distributePhysical : Int -> Stats -> Stats
@@ -141,21 +184,27 @@ distributePhysical points current =
     let
         lowest : Int
         lowest =
-            List.minimum [ current.power, current.forte, current.agility, current.speed ]
+            [ current.power, current.forte, current.agility, current.speed ]
+                |> List.map .value
+                |> List.minimum
                 |> Maybe.withDefault 0
     in
     if points > 0 then
-        if current.power == lowest then
-            distributePhysical (points - 1) { current | power = current.power + 1 }
+        if current.power.value == lowest then
+            distributePhysical (points - 1)
+                { current | power = updateStat current.power (current.power.value + 1) }
 
-        else if current.forte == lowest then
-            distributePhysical (points - 1) { current | forte = current.forte + 1 }
+        else if current.forte.value == lowest then
+            distributePhysical (points - 1)
+                { current | forte = updateStat current.forte (current.forte.value + 1) }
 
-        else if current.agility == lowest then
-            distributePhysical (points - 1) { current | agility = current.agility + 1 }
+        else if current.agility.value == lowest then
+            distributePhysical (points - 1)
+                { current | agility = updateStat current.agility (current.agility.value + 1) }
 
-        else if current.speed == lowest then
-            distributePhysical (points - 1) { current | speed = current.speed + 1 }
+        else if current.speed.value == lowest then
+            distributePhysical (points - 1)
+                { current | speed = updateStat current.speed (current.speed.value + 1) }
 
         else
             current
@@ -180,22 +229,22 @@ changeStat stat val (Worksheet sheet) =
         updatedStats =
             case stat of
                 Stat.Will ->
-                    { currentStats | will = clampedVal }
+                    { currentStats | will = { value = clampedVal, shade = Stat.Black } }
 
                 Stat.Perception ->
-                    { currentStats | perception = clampedVal }
+                    { currentStats | perception = { value = clampedVal, shade = Stat.Black } }
 
                 Stat.Power ->
-                    { currentStats | power = clampedVal }
+                    { currentStats | power = { value = clampedVal, shade = Stat.Black } }
 
                 Stat.Forte ->
-                    { currentStats | forte = clampedVal }
+                    { currentStats | forte = { value = clampedVal, shade = Stat.Black } }
 
                 Stat.Agility ->
-                    { currentStats | agility = clampedVal }
+                    { currentStats | agility = { value = clampedVal, shade = Stat.Black } }
 
                 Stat.Speed ->
-                    { currentStats | speed = clampedVal }
+                    { currentStats | speed = { value = clampedVal, shade = Stat.Black } }
 
         updatedRemaining =
             recalculateSpentStats updatedStats <| Tuple.second sheet.statsRemaining
@@ -212,14 +261,16 @@ recalculateSpentStats currentStats total =
     let
         subtractStats : StatMod.Bonus -> StatMod.Bonus
         subtractStats current =
-            { mental = current.mental - (currentStats.will + currentStats.perception)
+            { mental =
+                current.mental
+                    - (currentStats.will.value + currentStats.perception.value)
             , physical =
                 current.physical
                     - List.sum
-                        [ currentStats.power
-                        , currentStats.forte
-                        , currentStats.agility
-                        , currentStats.speed
+                        [ currentStats.power.value
+                        , currentStats.forte.value
+                        , currentStats.agility.value
+                        , currentStats.speed.value
                         ]
             , either = current.either
             }
@@ -303,12 +354,12 @@ recalculateLifepathData currentStats paths =
 
 allOnes : Stats
 allOnes =
-    { will = 1
-    , perception = 1
-    , power = 1
-    , forte = 1
-    , agility = 1
-    , speed = 1
+    { will = { value = 1, shade = Stat.Black }
+    , perception = { value = 1, shade = Stat.Black }
+    , power = { value = 1, shade = Stat.Black }
+    , forte = { value = 1, shade = Stat.Black }
+    , agility = { value = 1, shade = Stat.Black }
+    , speed = { value = 1, shade = Stat.Black }
     }
 
 
@@ -345,6 +396,68 @@ lifepathBonuses =
             StatMod.addBonus bonus <| StatMod.bonus path.statMod
     in
     NonEmpty.foldl sumBonus StatMod.noBonus
+
+
+toggleShade : Stat -> Worksheet -> Worksheet
+toggleShade stat (Worksheet sheet) =
+    let
+        currentShade : Stat.Shade
+        currentShade =
+            sheet.stats
+                |> statWithShade stat
+                |> .shade
+
+        modification : Int
+        modification =
+            case currentShade of
+                Stat.Black ->
+                    -5
+
+                Stat.Gray ->
+                    5
+
+        updatedRemaining : ( StatMod.Bonus, StatMod.Bonus )
+        updatedRemaining =
+            if stat == Stat.Will || stat == Stat.Perception then
+                Tuple.mapFirst
+                    (\bonus -> { bonus | mental = bonus.mental + modification })
+                    sheet.statsRemaining
+
+            else
+                Tuple.mapFirst
+                    (\bonus -> { bonus | physical = bonus.physical + modification })
+                    sheet.statsRemaining
+
+        newShade : Stat.Shade
+        newShade =
+            Stat.toggleShade currentShade
+
+        currentStats : Stats
+        currentStats =
+            sheet.stats
+
+        updatedStats : Stats
+        updatedStats =
+            case stat of
+                Stat.Will ->
+                    { currentStats | will = updateShade currentStats.will newShade }
+
+                Stat.Perception ->
+                    { currentStats | perception = updateShade currentStats.perception newShade }
+
+                Stat.Power ->
+                    { currentStats | power = updateShade currentStats.power newShade }
+
+                Stat.Forte ->
+                    { currentStats | forte = updateShade currentStats.forte newShade }
+
+                Stat.Agility ->
+                    { currentStats | agility = updateShade currentStats.agility newShade }
+
+                Stat.Speed ->
+                    { currentStats | speed = updateShade currentStats.speed newShade }
+    in
+    Worksheet { sheet | stats = updatedStats, statsRemaining = updatedRemaining }
 
 
 type alias AgeTableRow =

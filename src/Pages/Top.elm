@@ -143,6 +143,7 @@ type Msg
     | ArrowPress Direction
     | ChangeStat Stat Int
     | DistributeStats
+    | ToggleShade Stat
     | NoOp
 
 
@@ -304,6 +305,11 @@ update msg model =
 
         DistributeStats ->
             ( updateWorksheet Worksheet.distributeStats model
+            , Cmd.none
+            )
+
+        ToggleShade stat ->
+            ( updateWorksheet (Worksheet.toggleShade stat) model
             , Cmd.none
             )
 
@@ -506,12 +512,12 @@ viewWorksheet worksheet =
 
         statRows : List StatRow
         statRows =
-            [ { stat = Stat.Will, value = stats.will }
-            , { stat = Stat.Perception, value = stats.perception }
-            , { stat = Stat.Power, value = stats.power }
-            , { stat = Stat.Forte, value = stats.forte }
-            , { stat = Stat.Agility, value = stats.agility }
-            , { stat = Stat.Speed, value = stats.speed }
+            [ { stat = Stat.Will, value = stats.will.value, shade = stats.will.shade }
+            , { stat = Stat.Perception, value = stats.perception.value, shade = stats.perception.shade }
+            , { stat = Stat.Power, value = stats.power.value, shade = stats.power.shade }
+            , { stat = Stat.Forte, value = stats.forte.value, shade = stats.forte.shade }
+            , { stat = Stat.Agility, value = stats.agility.value, shade = stats.agility.shade }
+            , { stat = Stat.Speed, value = stats.speed.value, shade = stats.speed.shade }
             ]
 
         statWarning : (StatMod.Bonus -> Int) -> Element Msg
@@ -534,6 +540,10 @@ viewWorksheet worksheet =
                 [ { header = none
                   , width = shrink
                   , view = text << Stat.toString << .stat
+                  }
+                , { header = none
+                  , width = shrink
+                  , view = statShadeButton
                   }
                 , { header = none
                   , width = shrink
@@ -570,7 +580,30 @@ viewWorksheet worksheet =
 type alias StatRow =
     { stat : Stat
     , value : Int
+    , shade : Stat.Shade
     }
+
+
+statShadeButton : StatRow -> Element Msg
+statShadeButton { stat, shade } =
+    Input.button
+        [ Border.color Colors.shadow
+        , Border.rounded 3
+        , Border.width 1
+        , Font.size 14
+        , Font.family [ Font.monospace ]
+        , padding 3
+        ]
+        { onPress = Just <| ToggleShade stat
+        , label =
+            text <|
+                case shade of
+                    Stat.Black ->
+                        "B"
+
+                    Stat.Gray ->
+                        "G"
+        }
 
 
 changeStatButtons : StatRow -> Element Msg

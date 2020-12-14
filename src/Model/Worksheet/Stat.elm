@@ -1,4 +1,9 @@
-module Model.Worksheet.Stat exposing (Stat(..), toString)
+module Model.Worksheet.Stat exposing
+    ( Shade(..)
+    , Stat(..)
+    , toString
+    , toggleShade
+    )
 
 
 type Stat
@@ -8,6 +13,21 @@ type Stat
     | Forte
     | Agility
     | Speed
+
+
+type Shade
+    = Black
+    | Gray
+
+
+toggleShade : Shade -> Shade
+toggleShade shade =
+    case shade of
+        Black ->
+            Gray
+
+        Gray ->
+            Black
 
 
 toString : Stat -> String
