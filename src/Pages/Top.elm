@@ -445,10 +445,13 @@ view model =
     { title = "Charred Knockoff"
     , modal = Maybe.map viewModal model.modalState
     , body =
-        viewCharacterAndLifepaths model
-            ++ (model.worksheet |> Maybe.map viewWorksheet |> Maybe.withDefault [])
-            -- NOTE  this has to be last
-            ++ [ ghostView model.dnd unpackedLifepaths ]
+        List.concat
+            [ viewCharacterAndLifepaths model
+            , model.worksheet
+                |> Maybe.map viewWorksheet
+                |> Maybe.withDefault []
+            , [ ghostView model.dnd unpackedLifepaths ] -- NOTE this has to be last
+            ]
     }
 
 
@@ -482,13 +485,20 @@ viewAge maybeSheet =
 viewWorksheet : Worksheet -> List (Element Msg)
 viewWorksheet worksheet =
     let
-        remaining : (StatMod.Bonus -> Int) -> String
-        remaining prop =
+        viewRemaining : (StatMod.Bonus -> Int) -> String
+        viewRemaining prop =
             worksheet
                 |> Worksheet.statsRemaining
                 |> Tuple.mapBoth prop prop
                 |> Tuple.mapBoth String.fromInt String.fromInt
                 |> (\( rem, total ) -> rem ++ "/" ++ total)
+
+        remaining : (StatMod.Bonus -> Int) -> Int
+        remaining prop =
+            worksheet
+                |> Worksheet.statsRemaining
+                |> Tuple.first
+                |> prop
 
         stats : Worksheet.Stats
         stats =
@@ -503,33 +513,57 @@ viewWorksheet worksheet =
             , { stat = Stat.Agility, value = stats.agility }
             , { stat = Stat.Speed, value = stats.speed }
             ]
+
+        statWarning : (StatMod.Bonus -> Int) -> Element Msg
+        statWarning prop =
+            el
+                [ alignTop
+                , alignLeft
+                , transparent (remaining prop >= 0)
+                , paddingEach { edges | left = 20 }
+                ]
+                Components.warningIcon
     in
     [ heading "Stats and Attributes"
-    , paragraph [ Font.size 18, padding 20 ]
-        [ text "Remaining: "
-        , text <| "mental: " ++ remaining .mental
-        , text <| ", physical: " ++ remaining .physical
-        , text <| ", either: " ++ remaining .either
-        ]
-    , el [ paddingXY 20 0 ] <|
+    , el [ padding 20 ] <|
         faintButton "Distribute" (Just DistributeStats)
-    , table [ Font.size 18, spacing 5, padding 20 ]
-        { data = statRows
-        , columns =
-            [ { header = none
-              , width = shrink
-              , view = text << Stat.toString << .stat
-              }
-            , { header = none
-              , width = shrink
-              , view = text << String.fromInt << .value
-              }
-            , { header = none
-              , width = shrink
-              , view = changeStatButtons
-              }
+    , row []
+        [ table [ Font.size 18, spacing 5, padding 20 ]
+            { data = statRows
+            , columns =
+                [ { header = none
+                  , width = shrink
+                  , view = text << Stat.toString << .stat
+                  }
+                , { header = none
+                  , width = shrink
+                  , view = text << String.fromInt << .value
+                  }
+                , { header = none
+                  , width = shrink
+                  , view = changeStatButtons
+                  }
+                ]
+            }
+        , column
+            [ width fill
+            , alignTop
+            , Font.size 18
+            , padding 20
+            , spacing 5
             ]
-        }
+            [ text "Remaining: "
+            , row [ width fill ]
+                [ text <| "Mental: " ++ viewRemaining .mental
+                , statWarning .mental
+                ]
+            , row []
+                [ text <| "Physical: " ++ viewRemaining .physical
+                , statWarning .physical
+                ]
+            , row [] [ text <| "Either: " ++ viewRemaining .either ]
+            ]
+        ]
     ]
 
 
