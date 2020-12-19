@@ -7,20 +7,27 @@ module Model.Worksheet exposing
     , lifepaths
     , new
     , replaceLifepaths
-    , stats
-    , statsRemaining
     , toggleShade
     , updateLifepaths
+    , view
     )
 
 {-| A module for the data that the user can edit after choosing lifepaths.
 -}
 
+import Colors
+import Common exposing (corners, edges)
+import Components
+import Element exposing (..)
+import Element.Border as Border
+import Element.Font as Font
+import Element.Input as Input
 import List.NonEmpty as NonEmpty exposing (NonEmpty)
 import Model.Lifepath as Lifepath exposing (Lifepath)
 import Model.Lifepath.StatMod as StatMod exposing (StatMod)
 import Model.Lifepath.Validation as Validation exposing (PathWithWarnings, ValidatedLifepaths)
 import Model.Lifepath.Years as Years
+import Model.Worksheet.Constants as Constants
 import Model.Worksheet.Stat as Stat exposing (Stat)
 
 
@@ -39,16 +46,6 @@ type alias WorksheetData =
 age : Worksheet -> Int
 age (Worksheet sheet) =
     sheet.age
-
-
-statsRemaining : Worksheet -> ( StatMod.Bonus, StatMod.Bonus )
-statsRemaining (Worksheet sheet) =
-    sheet.statsRemaining
-
-
-stats : Worksheet -> Stats
-stats (Worksheet sheet) =
-    sheet.stats
 
 
 type alias StatWithShade =
@@ -374,15 +371,15 @@ sumAge paths =
 ageStats : Int -> StatMod.Bonus
 ageStats a =
     let
-        inRange : AgeTableRow -> Bool
+        inRange : Constants.AgeTableRow -> Bool
         inRange { minAge, maxAge } =
             minAge <= a && maxAge >= a
 
-        ageRowToBonus : AgeTableRow -> StatMod.Bonus
+        ageRowToBonus : Constants.AgeTableRow -> StatMod.Bonus
         ageRowToBonus { physical, mental } =
             { physical = physical, mental = mental, either = 0 }
     in
-    dwarfAgeTable
+    Constants.dwarfAgeTable
         |> List.filter inRange
         |> List.head
         |> Maybe.map ageRowToBonus
@@ -460,84 +457,181 @@ toggleShade stat (Worksheet sheet) =
     Worksheet { sheet | stats = updatedStats, statsRemaining = updatedRemaining }
 
 
-type alias AgeTableRow =
-    { minAge : Int
-    , maxAge : Int
-    , physical : Int
-    , mental : Int
+type alias Options msg =
+    { worksheet : Worksheet
+    , distributeStats : msg
+    , toggleShade : Stat -> msg
+    , changeStat : Stat -> Int -> msg
     }
 
 
-dwarfAgeTable : List AgeTableRow
-dwarfAgeTable =
-    [ { minAge = 1
-      , maxAge = 20
-      , mental = 6
-      , physical = 13
-      }
-    , { minAge = 21
-      , maxAge = 30
-      , mental = 7
-      , physical = 13
-      }
-    , { minAge = 31
-      , maxAge = 50
-      , mental = 7
-      , physical = 14
-      }
-    , { minAge = 51
-      , maxAge = 76
-      , mental = 8
-      , physical = 15
-      }
-    , { minAge = 77
-      , maxAge = 111
-      , mental = 8
-      , physical = 16
-      }
-    , { minAge = 112
-      , maxAge = 151
-      , mental = 9
-      , physical = 16
-      }
-    , { minAge = 152
-      , maxAge = 199
-      , mental = 9
-      , physical = 17
-      }
-    , { minAge = 200
-      , maxAge = 245
-      , mental = 10
-      , physical = 18
-      }
-    , { minAge = 246
-      , maxAge = 300
-      , mental = 11
-      , physical = 17
-      }
-    , { minAge = 301
-      , maxAge = 345
-      , mental = 11
-      , physical = 16
-      }
-    , { minAge = 346
-      , maxAge = 396
-      , mental = 12
-      , physical = 15
-      }
-    , { minAge = 397
-      , maxAge = 445
-      , mental = 11
-      , physical = 14
-      }
-    , { minAge = 446
-      , maxAge = 525
-      , mental = 11
-      , physical = 13
-      }
-    , { minAge = 526
-      , maxAge = 600
-      , mental = 10
-      , physical = 12
-      }
+view : Options msg -> List (Element msg)
+view opts =
+    let
+        (Worksheet sheet) =
+            opts.worksheet
+
+        viewRemaining : (StatMod.Bonus -> Int) -> String
+        viewRemaining prop =
+            sheet.statsRemaining
+                |> Tuple.mapBoth prop prop
+                |> Tuple.mapBoth String.fromInt String.fromInt
+                |> (\( rem, total ) -> rem ++ "/" ++ total)
+
+        remaining : (StatMod.Bonus -> Int) -> Int
+        remaining prop =
+            sheet.statsRemaining
+                |> Tuple.first
+                |> prop
+
+        statValue : (Stats -> StatWithShade) -> Int
+        statValue stat =
+            .value (stat sheet.stats)
+
+        statShade : (Stats -> StatWithShade) -> Stat.Shade
+        statShade stat =
+            .shade (stat sheet.stats)
+
+        statRows : List StatRow
+        statRows =
+            [ { stat = Stat.Will
+              , value = statValue .will
+              , shade = statShade .will
+              }
+            , { stat = Stat.Perception
+              , value = statValue .perception
+              , shade = statShade .perception
+              }
+            , { stat = Stat.Power
+              , value = statValue .power
+              , shade = statShade .power
+              }
+            , { stat = Stat.Forte
+              , value = statValue .forte
+              , shade = statShade .forte
+              }
+            , { stat = Stat.Agility
+              , value = statValue .agility
+              , shade = statShade .agility
+              }
+            , { stat = Stat.Speed
+              , value = statValue .speed
+              , shade = statShade .speed
+              }
+            ]
+
+        statWarning : (StatMod.Bonus -> Int) -> Element msg
+        statWarning prop =
+            el
+                [ alignTop
+                , alignLeft
+                , transparent (remaining prop >= 0)
+                , paddingEach { edges | left = 20 }
+                ]
+                Components.warningIcon
+    in
+    [ el [ padding 20 ] <|
+        Components.faintButton "Distribute" (Just opts.distributeStats)
+    , row []
+        [ table [ Font.size 18, spacing 5, padding 20 ]
+            { data = statRows
+            , columns =
+                [ { header = none
+                  , width = shrink
+                  , view = text << Stat.toString << .stat
+                  }
+                , { header = none
+                  , width = shrink
+                  , view = statShadeButton opts.toggleShade
+                  }
+                , { header = none
+                  , width = shrink
+                  , view = text << String.fromInt << .value
+                  }
+                , { header = none
+                  , width = shrink
+                  , view = changeStatButtons opts.changeStat
+                  }
+                ]
+            }
+        , column
+            [ width fill
+            , alignTop
+            , Font.size 18
+            , padding 20
+            , spacing 5
+            ]
+            [ text "Remaining: "
+            , row [ width fill ]
+                [ text <| "Mental: " ++ viewRemaining .mental
+                , statWarning .mental
+                ]
+            , row []
+                [ text <| "Physical: " ++ viewRemaining .physical
+                , statWarning .physical
+                ]
+            , row [] [ text <| "Either: " ++ viewRemaining .either ]
+            ]
+        ]
     ]
+
+
+type alias StatRow =
+    { stat : Stat
+    , value : Int
+    , shade : Stat.Shade
+    }
+
+
+statShadeButton : (Stat -> msg) -> StatRow -> Element msg
+statShadeButton toggle { stat, shade } =
+    Input.button
+        [ Border.color Colors.shadow
+        , Border.rounded 3
+        , Border.width 1
+        , Font.size 14
+        , Font.family [ Font.monospace ]
+        , padding 3
+        ]
+        { onPress = Just <| toggle stat
+        , label =
+            text <|
+                case shade of
+                    Stat.Black ->
+                        "B"
+
+                    Stat.Gray ->
+                        "G"
+        }
+
+
+changeStatButtons : (Stat -> Int -> msg) -> StatRow -> Element msg
+changeStatButtons changeMsg statRow =
+    let
+        buttonStyles : List (Attribute msg)
+        buttonStyles =
+            [ Border.color Colors.shadow
+            , Font.size 14
+            , padding 3
+            ]
+    in
+    row []
+        [ Input.button
+            ([ Border.roundEach { corners | topLeft = 3, bottomLeft = 3 }
+             , Border.widthEach { left = 1, top = 1, bottom = 1, right = 0 }
+             ]
+                ++ buttonStyles
+            )
+            { onPress = Just <| changeMsg statRow.stat (statRow.value + 1)
+            , label = text "+"
+            }
+        , Input.button
+            ([ Border.roundEach { corners | topRight = 3, bottomRight = 3 }
+             , Border.widthEach { left = 1, top = 1, bottom = 1, right = 1 }
+             ]
+                ++ buttonStyles
+            )
+            { onPress = Just <| changeMsg statRow.stat (statRow.value - 1)
+            , label = text "-"
+            }
+        ]

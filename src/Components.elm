@@ -1,6 +1,7 @@
 module Components exposing
     ( deleteIcon
     , dragHandle
+    , faintButton
     , superScript
     , tooltip
     , warningIcon
@@ -86,3 +87,16 @@ deleteIcon =
 appIcon : Icon.Icon -> Element msg
 appIcon icon =
     html <| Icon.viewStyled [ Colors.darkenedHtml ] icon
+
+
+faintButton : String -> Maybe msg -> Element msg
+faintButton label onPress =
+    Input.button
+        [ Background.color Colors.faint
+        , Border.rounded 8
+        , paddingXY 15 10
+        , Font.size 18
+        ]
+        { onPress = onPress
+        , label = text label
+        }

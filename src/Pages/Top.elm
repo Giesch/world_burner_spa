@@ -343,7 +343,7 @@ handleArrow direction modalState =
 
 beginSearchDebounce : String -> Cmd Msg
 beginSearchDebounce searchText =
-    Process.sleep 100
+    Process.sleep 250
         |> Task.perform (\_ -> SearchTimePassed searchText)
 
 
@@ -476,7 +476,7 @@ viewCharacterAndLifepaths model =
     , heading "Lifepaths"
     , viewCharacterLifepaths model.worksheet model.dnd
     , el [ paddingEach { edges | right = 20, bottom = 20 }, alignRight ] <|
-        faintButton "Add Lifepath" (Just <| OpenModal After)
+        Components.faintButton "Add Lifepath" (Just <| OpenModal After)
     ]
 
 
@@ -490,91 +490,13 @@ viewAge maybeSheet =
 
 viewWorksheet : Worksheet -> List (Element Msg)
 viewWorksheet worksheet =
-    let
-        viewRemaining : (StatMod.Bonus -> Int) -> String
-        viewRemaining prop =
-            worksheet
-                |> Worksheet.statsRemaining
-                |> Tuple.mapBoth prop prop
-                |> Tuple.mapBoth String.fromInt String.fromInt
-                |> (\( rem, total ) -> rem ++ "/" ++ total)
-
-        remaining : (StatMod.Bonus -> Int) -> Int
-        remaining prop =
-            worksheet
-                |> Worksheet.statsRemaining
-                |> Tuple.first
-                |> prop
-
-        stats : Worksheet.Stats
-        stats =
-            Worksheet.stats worksheet
-
-        statRows : List StatRow
-        statRows =
-            [ { stat = Stat.Will, value = stats.will.value, shade = stats.will.shade }
-            , { stat = Stat.Perception, value = stats.perception.value, shade = stats.perception.shade }
-            , { stat = Stat.Power, value = stats.power.value, shade = stats.power.shade }
-            , { stat = Stat.Forte, value = stats.forte.value, shade = stats.forte.shade }
-            , { stat = Stat.Agility, value = stats.agility.value, shade = stats.agility.shade }
-            , { stat = Stat.Speed, value = stats.speed.value, shade = stats.speed.shade }
-            ]
-
-        statWarning : (StatMod.Bonus -> Int) -> Element Msg
-        statWarning prop =
-            el
-                [ alignTop
-                , alignLeft
-                , transparent (remaining prop >= 0)
-                , paddingEach { edges | left = 20 }
-                ]
-                Components.warningIcon
-    in
-    [ heading "Stats and Attributes"
-    , el [ padding 20 ] <|
-        faintButton "Distribute" (Just DistributeStats)
-    , row []
-        [ table [ Font.size 18, spacing 5, padding 20 ]
-            { data = statRows
-            , columns =
-                [ { header = none
-                  , width = shrink
-                  , view = text << Stat.toString << .stat
-                  }
-                , { header = none
-                  , width = shrink
-                  , view = statShadeButton
-                  }
-                , { header = none
-                  , width = shrink
-                  , view = text << String.fromInt << .value
-                  }
-                , { header = none
-                  , width = shrink
-                  , view = changeStatButtons
-                  }
-                ]
+    heading "Stats and Attributes"
+        :: Worksheet.view
+            { worksheet = worksheet
+            , distributeStats = DistributeStats
+            , toggleShade = ToggleShade
+            , changeStat = ChangeStat
             }
-        , column
-            [ width fill
-            , alignTop
-            , Font.size 18
-            , padding 20
-            , spacing 5
-            ]
-            [ text "Remaining: "
-            , row [ width fill ]
-                [ text <| "Mental: " ++ viewRemaining .mental
-                , statWarning .mental
-                ]
-            , row []
-                [ text <| "Physical: " ++ viewRemaining .physical
-                , statWarning .physical
-                ]
-            , row [] [ text <| "Either: " ++ viewRemaining .either ]
-            ]
-        ]
-    ]
 
 
 type alias StatRow =
@@ -582,60 +504,6 @@ type alias StatRow =
     , value : Int
     , shade : Stat.Shade
     }
-
-
-statShadeButton : StatRow -> Element Msg
-statShadeButton { stat, shade } =
-    Input.button
-        [ Border.color Colors.shadow
-        , Border.rounded 3
-        , Border.width 1
-        , Font.size 14
-        , Font.family [ Font.monospace ]
-        , padding 3
-        ]
-        { onPress = Just <| ToggleShade stat
-        , label =
-            text <|
-                case shade of
-                    Stat.Black ->
-                        "B"
-
-                    Stat.Gray ->
-                        "G"
-        }
-
-
-changeStatButtons : StatRow -> Element Msg
-changeStatButtons statRow =
-    let
-        buttonStyles : List (Attribute Msg)
-        buttonStyles =
-            [ Border.color Colors.shadow
-            , Font.size 14
-            , padding 3
-            ]
-    in
-    row []
-        [ Input.button
-            ([ Border.roundEach { corners | topLeft = 3, bottomLeft = 3 }
-             , Border.widthEach { left = 1, top = 1, bottom = 1, right = 0 }
-             ]
-                ++ buttonStyles
-            )
-            { onPress = Just <| ChangeStat statRow.stat (statRow.value + 1)
-            , label = text "+"
-            }
-        , Input.button
-            ([ Border.roundEach { corners | topRight = 3, bottomRight = 3 }
-             , Border.widthEach { left = 1, top = 1, bottom = 1, right = 1 }
-             ]
-                ++ buttonStyles
-            )
-            { onPress = Just <| ChangeStat statRow.stat (statRow.value - 1)
-            , label = text "-"
-            }
-        ]
 
 
 viewCharacterLifepaths : Maybe Worksheet -> DnDList.Model -> Element Msg
@@ -648,7 +516,7 @@ viewCharacterLifepaths worksheet dnd =
             Just lifepaths ->
                 column [ width fill ] <|
                     [ el [ paddingEach { edges | bottom = 20 }, alignRight ] <|
-                        faintButton "Add Lifepath" (Just <| OpenModal Before)
+                        Components.faintButton "Add Lifepath" (Just <| OpenModal Before)
                     , el
                         [ width fill
                         , Border.width 1
@@ -659,19 +527,6 @@ viewCharacterLifepaths worksheet dnd =
                         column [ width fill ] <|
                             List.indexedMap (viewDraggableLifepath dnd) lifepaths
                     ]
-
-
-faintButton : String -> Maybe Msg -> Element Msg
-faintButton label onPress =
-    Input.button
-        [ Background.color Colors.faint
-        , Border.rounded 8
-        , paddingXY 15 10
-        , Font.size 18
-        ]
-        { onPress = onPress
-        , label = text label
-        }
 
 
 modalSearchId : String
@@ -749,8 +604,8 @@ viewModal modalState =
             , padding 20
             , alignRight
             ]
-            [ faintButton "Cancel" <| Just (SubmitModal Nothing)
-            , faintButton "Add" <| Just (SubmitModal submission)
+            [ Components.faintButton "Cancel" <| Just (SubmitModal Nothing)
+            , Components.faintButton "Add" <| Just (SubmitModal submission)
             ]
         ]
 
