@@ -30,6 +30,7 @@ import Model.Lifepath.Validation as Validation exposing (PathWithWarnings, Valid
 import Model.Lifepath.Years as Years exposing (Years)
 import Model.Status as Status exposing (Status)
 import Model.Worksheet as Worksheet exposing (Worksheet)
+import Model.Worksheet.Shade as Shade exposing (Shade)
 import Model.Worksheet.Stat as Stat exposing (Stat)
 import Process
 import Shared
@@ -463,7 +464,7 @@ view model =
 
 viewCharacterAndLifepaths : Model -> List (Element Msg)
 viewCharacterAndLifepaths model =
-    [ heading "Character"
+    [ topHeading "Character"
     , row [ padding 20, spacing 20 ]
         [ Input.text []
             { onChange = EnteredName
@@ -502,7 +503,7 @@ viewWorksheet worksheet =
 type alias StatRow =
     { stat : Stat
     , value : Int
-    , shade : Stat.Shade
+    , shade : Shade
     }
 
 
@@ -649,9 +650,20 @@ ghostView dnd lifepaths =
             none
 
 
+topHeading : String -> Element Msg
+topHeading head =
+    el (Border.roundEach { corners | topLeft = 8, topRight = 8 } :: headingAttrs) <|
+        text head
+
+
 heading : String -> Element Msg
-heading h =
-    el [ width fill, padding 20, Background.color Colors.faint ] <| text h
+heading head =
+    el headingAttrs <| text head
+
+
+headingAttrs : List (Attribute msg)
+headingAttrs =
+    [ width fill, padding 20, Background.color Colors.faint ]
 
 
 type alias DnDStyles =

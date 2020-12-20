@@ -28,6 +28,7 @@ import Model.Lifepath.StatMod as StatMod exposing (StatMod)
 import Model.Lifepath.Validation as Validation exposing (PathWithWarnings, ValidatedLifepaths)
 import Model.Lifepath.Years as Years
 import Model.Worksheet.Constants as Constants
+import Model.Worksheet.Shade as Shade exposing (Shade)
 import Model.Worksheet.Stat as Stat exposing (Stat)
 
 
@@ -50,7 +51,7 @@ age (Worksheet sheet) =
 
 type alias StatWithShade =
     { value : Int
-    , shade : Stat.Shade
+    , shade : Shade
     }
 
 
@@ -88,12 +89,12 @@ statWithShade stat sheetStats =
 
 zeroStats : Stats
 zeroStats =
-    { will = { value = 0, shade = Stat.Black }
-    , perception = { value = 0, shade = Stat.Black }
-    , power = { value = 0, shade = Stat.Black }
-    , forte = { value = 0, shade = Stat.Black }
-    , agility = { value = 0, shade = Stat.Black }
-    , speed = { value = 0, shade = Stat.Black }
+    { will = { value = 0, shade = Shade.Black }
+    , perception = { value = 0, shade = Shade.Black }
+    , power = { value = 0, shade = Shade.Black }
+    , forte = { value = 0, shade = Shade.Black }
+    , agility = { value = 0, shade = Shade.Black }
+    , speed = { value = 0, shade = Shade.Black }
     }
 
 
@@ -171,7 +172,7 @@ updateStat stat value =
     { stat | value = value }
 
 
-updateShade : StatWithShade -> Stat.Shade -> StatWithShade
+updateShade : StatWithShade -> Shade -> StatWithShade
 updateShade stat shade =
     { stat | shade = shade }
 
@@ -226,22 +227,22 @@ changeStat stat val (Worksheet sheet) =
         updatedStats =
             case stat of
                 Stat.Will ->
-                    { currentStats | will = { value = clampedVal, shade = Stat.Black } }
+                    { currentStats | will = { value = clampedVal, shade = Shade.Black } }
 
                 Stat.Perception ->
-                    { currentStats | perception = { value = clampedVal, shade = Stat.Black } }
+                    { currentStats | perception = { value = clampedVal, shade = Shade.Black } }
 
                 Stat.Power ->
-                    { currentStats | power = { value = clampedVal, shade = Stat.Black } }
+                    { currentStats | power = { value = clampedVal, shade = Shade.Black } }
 
                 Stat.Forte ->
-                    { currentStats | forte = { value = clampedVal, shade = Stat.Black } }
+                    { currentStats | forte = { value = clampedVal, shade = Shade.Black } }
 
                 Stat.Agility ->
-                    { currentStats | agility = { value = clampedVal, shade = Stat.Black } }
+                    { currentStats | agility = { value = clampedVal, shade = Shade.Black } }
 
                 Stat.Speed ->
-                    { currentStats | speed = { value = clampedVal, shade = Stat.Black } }
+                    { currentStats | speed = { value = clampedVal, shade = Shade.Black } }
 
         updatedRemaining =
             recalculateSpentStats updatedStats <| Tuple.second sheet.statsRemaining
@@ -351,12 +352,12 @@ recalculateLifepathData currentStats paths =
 
 allOnes : Stats
 allOnes =
-    { will = { value = 1, shade = Stat.Black }
-    , perception = { value = 1, shade = Stat.Black }
-    , power = { value = 1, shade = Stat.Black }
-    , forte = { value = 1, shade = Stat.Black }
-    , agility = { value = 1, shade = Stat.Black }
-    , speed = { value = 1, shade = Stat.Black }
+    { will = { value = 1, shade = Shade.Black }
+    , perception = { value = 1, shade = Shade.Black }
+    , power = { value = 1, shade = Shade.Black }
+    , forte = { value = 1, shade = Shade.Black }
+    , agility = { value = 1, shade = Shade.Black }
+    , speed = { value = 1, shade = Shade.Black }
     }
 
 
@@ -398,7 +399,7 @@ lifepathBonuses =
 toggleShade : Stat -> Worksheet -> Worksheet
 toggleShade stat (Worksheet sheet) =
     let
-        currentShade : Stat.Shade
+        currentShade : Shade
         currentShade =
             sheet.stats
                 |> statWithShade stat
@@ -407,10 +408,10 @@ toggleShade stat (Worksheet sheet) =
         modification : Int
         modification =
             case currentShade of
-                Stat.Black ->
+                Shade.Black ->
                     -5
 
-                Stat.Gray ->
+                Shade.Gray ->
                     5
 
         updatedRemaining : ( StatMod.Bonus, StatMod.Bonus )
@@ -425,9 +426,9 @@ toggleShade stat (Worksheet sheet) =
                     (\bonus -> { bonus | physical = bonus.physical + modification })
                     sheet.statsRemaining
 
-        newShade : Stat.Shade
+        newShade : Shade
         newShade =
-            Stat.toggleShade currentShade
+            Shade.toggle currentShade
 
         currentStats : Stats
         currentStats =
@@ -455,6 +456,59 @@ toggleShade stat (Worksheet sheet) =
                     { currentStats | speed = updateShade currentStats.speed newShade }
     in
     Worksheet { sheet | stats = updatedStats, statsRemaining = updatedRemaining }
+
+
+mortalWound : WorksheetData -> ( Shade, Int )
+mortalWound sheet =
+    let
+        base : Int
+        base =
+            6 + ((sheet.stats.forte.value + sheet.stats.power.value) // 2)
+    in
+    case ( sheet.stats.power.shade, sheet.stats.forte.shade ) of
+        ( Shade.Black, Shade.Black ) ->
+            ( Shade.Black, base )
+
+        ( Shade.Gray, Shade.Gray ) ->
+            ( Shade.Gray, base )
+
+        _ ->
+            ( Shade.Black, base + 2 )
+
+
+reflexes : WorksheetData -> ( Shade, Int )
+reflexes sheet =
+    let
+        base : Int
+        base =
+            (sheet.stats.perception.value
+                + sheet.stats.agility.value
+                + sheet.stats.speed.value
+            )
+                // 3
+
+        countGray : Shade -> Int
+        countGray shade =
+            if shade == Shade.Gray then
+                1
+
+            else
+                0
+
+        grays : Int
+        grays =
+            List.sum <|
+                List.map countGray
+                    [ sheet.stats.perception.shade
+                    , sheet.stats.agility.shade
+                    , sheet.stats.speed.shade
+                    ]
+    in
+    if grays == 3 then
+        ( Shade.Gray, base )
+
+    else
+        ( Shade.Black, base + (grays * 2) )
 
 
 type alias Options msg =
@@ -488,7 +542,7 @@ view opts =
         statValue stat =
             .value (stat sheet.stats)
 
-        statShade : (Stats -> StatWithShade) -> Stat.Shade
+        statShade : (Stats -> StatWithShade) -> Shade
         statShade stat =
             .shade (stat sheet.stats)
 
@@ -529,6 +583,10 @@ view opts =
                 , paddingEach { edges | left = 20 }
                 ]
                 Components.warningIcon
+
+        viewAttribute : String -> ( Shade, Int ) -> Element msg
+        viewAttribute name ( shade, value ) =
+            text <| name ++ ": " ++ Shade.toString shade ++ String.fromInt value
     in
     [ el [ padding 20 ] <|
         Components.faintButton "Distribute" (Just opts.distributeStats)
@@ -572,6 +630,17 @@ view opts =
                 ]
             , row [] [ text <| "Either: " ++ viewRemaining .either ]
             ]
+        , column
+            [ width fill
+            , alignTop
+            , Font.size 18
+            , padding 20
+            , spacing 5
+            ]
+            [ text "Attributes:"
+            , viewAttribute "Mortal Wound" <| mortalWound sheet
+            , viewAttribute "Reflexes" <| reflexes sheet
+            ]
         ]
     ]
 
@@ -579,7 +648,7 @@ view opts =
 type alias StatRow =
     { stat : Stat
     , value : Int
-    , shade : Stat.Shade
+    , shade : Shade
     }
 
 
@@ -594,14 +663,7 @@ statShadeButton toggle { stat, shade } =
         , padding 3
         ]
         { onPress = Just <| toggle stat
-        , label =
-            text <|
-                case shade of
-                    Stat.Black ->
-                        "B"
-
-                    Stat.Gray ->
-                        "G"
+        , label = text <| Shade.toString shade
         }
 
 
