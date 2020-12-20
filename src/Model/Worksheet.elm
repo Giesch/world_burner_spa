@@ -461,9 +461,14 @@ toggleShade stat (Worksheet sheet) =
 mortalWound : WorksheetData -> ( Shade, Int )
 mortalWound sheet =
     let
+        avg : Float
+        avg =
+            (toFloat <| sheet.stats.forte.value + sheet.stats.power.value) / 2
+
         base : Int
         base =
-            6 + ((sheet.stats.forte.value + sheet.stats.power.value) // 2)
+            -- NOTE ceiling or floor should depend on traits
+            6 + ceiling avg
     in
     case ( sheet.stats.power.shade, sheet.stats.forte.shade ) of
         ( Shade.Black, Shade.Black ) ->
