@@ -1,13 +1,16 @@
 module Model.Worksheet exposing
-    ( Stats
+    ( HealthAnswers
+    , Stats
     , Worksheet
     , age
     , changeStat
     , distributeStats
+    , healthAnswers
     , lifepaths
     , new
     , replaceLifepaths
     , toggleShade
+    , updateHealthAnswers
     , updateLifepaths
     , view
     )
@@ -41,6 +44,7 @@ type alias WorksheetData =
     , age : Int
     , statsRemaining : ( StatMod.Bonus, StatMod.Bonus )
     , stats : Stats
+    , healthAndSteelAnswers : HealthAndSteelAnswers
     }
 
 
@@ -63,6 +67,100 @@ type alias Stats =
     , agility : StatWithShade
     , speed : StatWithShade
     }
+
+
+type alias HealthAndSteelAnswers =
+    { -- health
+      squalor : Bool
+    , frail : Bool
+    , wounded : Bool -- also used by steel
+    , enslaved : Bool -- also used by steel
+    , immortal : Bool
+    , athletic : Bool
+    , soundOfMusic : Bool
+
+    -- steel only
+    , soldier : Bool
+    , killer : Bool
+    , sheltered : Bool
+    , competitiveCulture : Bool
+    , givenBirth : Bool
+    , gifted : Bool
+    }
+
+
+type alias HealthAnswers =
+    { squalor : Bool
+    , frail : Bool
+    , wounded : Bool
+    , enslaved : Bool
+    , immortal : Bool
+    , athletic : Bool
+    , soundOfMusic : Bool
+    }
+
+
+healthAnswers : Worksheet -> HealthAnswers
+healthAnswers (Worksheet { healthAndSteelAnswers }) =
+    { squalor = healthAndSteelAnswers.squalor
+    , frail = healthAndSteelAnswers.frail
+    , wounded = healthAndSteelAnswers.wounded
+    , enslaved = healthAndSteelAnswers.enslaved
+    , immortal = healthAndSteelAnswers.immortal
+    , athletic = healthAndSteelAnswers.athletic
+    , soundOfMusic = healthAndSteelAnswers.soundOfMusic
+    }
+
+
+updateHealthAnswers : Worksheet -> HealthAnswers -> Worksheet
+updateHealthAnswers (Worksheet ({ healthAndSteelAnswers } as sheet)) newAnswers =
+    let
+        fullAnswers : HealthAndSteelAnswers
+        fullAnswers =
+            { healthAndSteelAnswers
+                | squalor = newAnswers.squalor
+                , frail = newAnswers.frail
+                , wounded = newAnswers.wounded
+                , enslaved = newAnswers.enslaved
+                , immortal = newAnswers.immortal
+                , athletic = newAnswers.athletic
+                , soundOfMusic = newAnswers.soundOfMusic
+            }
+    in
+    Worksheet { sheet | healthAndSteelAnswers = fullAnswers }
+
+
+defaultAnswers : HealthAndSteelAnswers
+defaultAnswers =
+    { squalor = False
+    , frail = False
+    , wounded = False
+    , enslaved = False
+    , immortal = True -- NOTE this should be based on traits
+    , athletic = False
+    , soundOfMusic = False
+    , soldier = False
+    , killer = False
+    , sheltered = False
+    , competitiveCulture = False
+    , givenBirth = False
+    , gifted = False
+    }
+
+
+healthModifier : HealthAndSteelAnswers -> Int
+healthModifier answers =
+    [ ( answers.squalor, -1 )
+    , ( answers.frail, -1 )
+    , ( answers.wounded, -1 )
+    , ( answers.enslaved, -1 )
+    , ( answers.immortal, 1 )
+    , ( answers.athletic, 1 )
+    , ( answers.soundOfMusic, 1 )
+    ]
+        |> List.filter Tuple.first
+        |> List.map Tuple.second
+        |> List.sum
 
 
 statWithShade : Stat -> Stats -> StatWithShade
@@ -317,6 +415,7 @@ newData paths =
     , age = lifepathData.age
     , statsRemaining = lifepathData.statsRemaining
     , stats = allOnes
+    , healthAndSteelAnswers = defaultAnswers
     }
 
 
@@ -463,7 +562,7 @@ mortalWound sheet =
     let
         avg : Float
         avg =
-            (toFloat <| sheet.stats.forte.value + sheet.stats.power.value) / 2
+            toFloat (sheet.stats.forte.value + sheet.stats.power.value) / 2
 
         base : Int
         base =
@@ -484,13 +583,12 @@ mortalWound sheet =
 reflexes : WorksheetData -> ( Shade, Int )
 reflexes sheet =
     let
+        { perception, agility, speed } =
+            sheet.stats
+
         base : Int
         base =
-            (sheet.stats.perception.value
-                + sheet.stats.agility.value
-                + sheet.stats.speed.value
-            )
-                // 3
+            (perception.value + agility.value + speed.value) // 3
 
         countGray : Shade -> Int
         countGray shade =
@@ -502,12 +600,9 @@ reflexes sheet =
 
         grays : Int
         grays =
-            List.sum <|
-                List.map countGray
-                    [ sheet.stats.perception.shade
-                    , sheet.stats.agility.shade
-                    , sheet.stats.speed.shade
-                    ]
+            [ perception.shade, agility.shade, speed.shade ]
+                |> List.map countGray
+                |> List.sum
     in
     if grays == 3 then
         ( Shade.Gray, base )
@@ -516,11 +611,34 @@ reflexes sheet =
         ( Shade.Black, base + (grays * 2) )
 
 
+health : WorksheetData -> ( Shade, Int )
+health { stats, healthAndSteelAnswers } =
+    let
+        avg : Float
+        avg =
+            toFloat (stats.will.value + stats.forte.value) / 2
+
+        base : Int
+        base =
+            floor avg + healthModifier healthAndSteelAnswers
+    in
+    case ( stats.will.shade, stats.forte.shade ) of
+        ( Shade.Gray, Shade.Gray ) ->
+            ( Shade.Gray, base )
+
+        ( Shade.Black, Shade.Black ) ->
+            ( Shade.Black, base )
+
+        _ ->
+            ( Shade.Black, base + 2 )
+
+
 type alias Options msg =
     { worksheet : Worksheet
     , distributeStats : msg
     , toggleShade : Stat -> msg
     , changeStat : Stat -> Int -> msg
+    , openHealthModal : msg
     }
 
 
@@ -543,41 +661,24 @@ view opts =
                 |> Tuple.first
                 |> prop
 
-        statValue : (Stats -> StatWithShade) -> Int
-        statValue stat =
-            .value (stat sheet.stats)
-
-        statShade : (Stats -> StatWithShade) -> Shade
-        statShade stat =
-            .shade (stat sheet.stats)
+        statRow : Stat -> StatRow
+        statRow stat =
+            let
+                { value, shade } =
+                    statWithShade stat sheet.stats
+            in
+            { stat = stat, value = value, shade = shade }
 
         statRows : List StatRow
         statRows =
-            [ { stat = Stat.Will
-              , value = statValue .will
-              , shade = statShade .will
-              }
-            , { stat = Stat.Perception
-              , value = statValue .perception
-              , shade = statShade .perception
-              }
-            , { stat = Stat.Power
-              , value = statValue .power
-              , shade = statShade .power
-              }
-            , { stat = Stat.Forte
-              , value = statValue .forte
-              , shade = statShade .forte
-              }
-            , { stat = Stat.Agility
-              , value = statValue .agility
-              , shade = statShade .agility
-              }
-            , { stat = Stat.Speed
-              , value = statValue .speed
-              , shade = statShade .speed
-              }
-            ]
+            List.map statRow
+                [ Stat.Will
+                , Stat.Perception
+                , Stat.Power
+                , Stat.Forte
+                , Stat.Agility
+                , Stat.Speed
+                ]
 
         statWarning : (StatMod.Bonus -> Int) -> Element msg
         statWarning prop =
@@ -592,9 +693,21 @@ view opts =
         viewAttribute : String -> ( Shade, Int ) -> Element msg
         viewAttribute name ( shade, value ) =
             text <| name ++ ": " ++ Shade.toString shade ++ String.fromInt value
+
+        questionsButton : msg -> Element msg
+        questionsButton msg =
+            Input.button
+                [ Border.color Colors.shadow
+                , Border.rounded 4
+                , Border.width 1
+                , padding 3
+                ]
+                { onPress = Just msg
+                , label = text "questions"
+                }
     in
     [ el [ padding 20 ] <|
-        Components.faintButton "Distribute" (Just opts.distributeStats)
+        Components.faintButton "Distribute" opts.distributeStats
     , row []
         [ table [ Font.size 18, spacing 5, padding 20 ]
             { data = statRows
@@ -645,6 +758,10 @@ view opts =
             [ text "Attributes:"
             , viewAttribute "Mortal Wound" <| mortalWound sheet
             , viewAttribute "Reflexes" <| reflexes sheet
+            , row [ spacing 10 ]
+                [ viewAttribute "Health" <| health sheet
+                , questionsButton opts.openHealthModal
+                ]
             ]
         ]
     ]

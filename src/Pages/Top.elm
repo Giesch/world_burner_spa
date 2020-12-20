@@ -65,22 +65,27 @@ type alias Model =
     { searchableLifepaths : Status LifepathIndex
     , name : String
     , dnd : DnDList.Model
-    , modalState : Maybe ModalState
+    , modalState : Maybe Modal
     , worksheet : Maybe Worksheet
     }
 
 
-type alias ModalState =
+type Modal
+    = LifepathModal LifepathModalState
+    | HealthQuestionModal Worksheet.HealthAnswers
+
+
+type alias LifepathModalState =
     { searchText : String
     , filteredPaths : List Lifepath
     , lifepathIndex : LifepathIndex
     , selectedLifepath : Int
-    , option : ModalOption
+    , option : LifepathModalOption
     }
 
 
-newModal : LifepathIndex -> ModalOption -> ModalState
-newModal lifepathIndex option =
+newLifepathModal : LifepathIndex -> LifepathModalOption -> LifepathModalState
+newLifepathModal lifepathIndex option =
     { searchText = ""
     , filteredPaths = applyOptionFilter option <| LifepathIndex.lifepaths lifepathIndex
     , lifepathIndex = lifepathIndex
@@ -89,7 +94,7 @@ newModal lifepathIndex option =
     }
 
 
-applyOptionFilter : ModalOption -> List Lifepath -> List Lifepath
+applyOptionFilter : LifepathModalOption -> List Lifepath -> List Lifepath
 applyOptionFilter option =
     case option of
         RequirementAt requirement _ ->
@@ -135,9 +140,9 @@ type Msg
     | DnDMsg DnDList.Msg
     | EnteredName String
     | RemoveLifepath Int
-    | OpenModal ModalOption
+    | OpenLifepathModal LifepathModalOption
     | SatisfyRequirement Requirement Int
-    | SubmitModal (Maybe ( ModalOption, Lifepath ))
+    | SubmitLifepathModal (Maybe ( LifepathModalOption, Lifepath ))
     | EnteredModalSearchText String
     | SearchTimePassed String
     | SelectedModalLifepath Int
@@ -145,10 +150,13 @@ type Msg
     | ChangeStat Stat Int
     | DistributeStats
     | ToggleShade Stat
+    | OpenHealthModal
+    | UpdateHealthAnswers Worksheet.HealthAnswers
+    | SubmitHealthModal (Maybe Worksheet.HealthAnswers)
     | NoOp
 
 
-type ModalOption
+type LifepathModalOption
     = Before
     | After
     | RequirementAt Requirement Int
@@ -209,10 +217,17 @@ update msg model =
             in
             ( { model | worksheet = newWorksheet }, Cmd.none )
 
-        OpenModal modalOption ->
+        OpenLifepathModal modalOption ->
             case model.searchableLifepaths of
                 Status.Loaded searchableLifepaths ->
-                    ( { model | modalState = Just <| newModal searchableLifepaths modalOption }
+                    let
+                        modalState : Maybe Modal
+                        modalState =
+                            newLifepathModal searchableLifepaths modalOption
+                                |> LifepathModal
+                                |> Just
+                    in
+                    ( { model | modalState = modalState }
                     , Task.attempt (\_ -> NoOp) <| Browser.Dom.focus modalSearchId
                     )
 
@@ -223,21 +238,27 @@ update msg model =
             case model.searchableLifepaths of
                 Status.Loaded searchableLifepaths ->
                     let
-                        option : ModalOption
+                        option : LifepathModalOption
                         option =
                             RequirementAt requirement index
+
+                        modalState : Maybe Modal
+                        modalState =
+                            newLifepathModal searchableLifepaths option
+                                |> LifepathModal
+                                |> Just
                     in
-                    ( { model | modalState = Just <| newModal searchableLifepaths option }
+                    ( { model | modalState = modalState }
                     , Task.attempt (\_ -> NoOp) <| Browser.Dom.focus modalSearchId
                     )
 
                 _ ->
                     ( model, Cmd.none )
 
-        SubmitModal Nothing ->
+        SubmitLifepathModal Nothing ->
             ( { model | modalState = Nothing }, Cmd.none )
 
-        SubmitModal (Just ( option, addedLifepath )) ->
+        SubmitLifepathModal (Just ( option, addedLifepath )) ->
             let
                 unpackedLifepaths : List Lifepath
                 unpackedLifepaths =
@@ -250,13 +271,18 @@ update msg model =
                 characterLifepaths =
                     case option of
                         After ->
-                            Common.appendIntoNonEmpty unpackedLifepaths addedLifepath
+                            Common.appendIntoNonEmpty
+                                unpackedLifepaths
+                                addedLifepath
 
                         Before ->
                             ( addedLifepath, unpackedLifepaths )
 
                         RequirementAt _ index ->
-                            Common.insertIntoNonEmpty unpackedLifepaths addedLifepath index
+                            Common.insertIntoNonEmpty
+                                unpackedLifepaths
+                                addedLifepath
+                                index
             in
             ( { model
                 | modalState = Nothing
@@ -270,7 +296,7 @@ update msg model =
             )
 
         SelectedModalLifepath index ->
-            updateModal
+            updateLifepathModal
                 (\modalState ->
                     ( { modalState | selectedLifepath = index }
                     , Cmd.none
@@ -279,7 +305,7 @@ update msg model =
                 model
 
         SearchTimePassed searchText ->
-            updateModal
+            updateLifepathModal
                 (\modalState ->
                     ( searchTimePassed searchText modalState
                     , Cmd.none
@@ -288,7 +314,7 @@ update msg model =
                 model
 
         EnteredModalSearchText searchText ->
-            updateModal
+            updateLifepathModal
                 (\modalState ->
                     ( { modalState | searchText = searchText }
                     , beginSearchDebounce searchText
@@ -297,7 +323,7 @@ update msg model =
                 model
 
         ArrowPress direction ->
-            updateModal (handleArrow direction) model
+            updateLifepathModal (handleArrow direction) model
 
         ChangeStat stat val ->
             ( updateWorksheet (Worksheet.changeStat stat val) model
@@ -314,13 +340,57 @@ update msg model =
             , Cmd.none
             )
 
+        OpenHealthModal ->
+            case model.worksheet of
+                Just worksheet ->
+                    let
+                        modalState : Maybe Modal
+                        modalState =
+                            worksheet
+                                |> Worksheet.healthAnswers
+                                |> HealthQuestionModal
+                                |> Just
+                    in
+                    ( { model | modalState = modalState }, Cmd.none )
+
+                Nothing ->
+                    ( model, Cmd.none )
+
+        UpdateHealthAnswers newAnswers ->
+            case model.modalState of
+                Just (HealthQuestionModal _) ->
+                    ( { model | modalState = Just <| HealthQuestionModal newAnswers }
+                    , Cmd.none
+                    )
+
+                _ ->
+                    ( model, Cmd.none )
+
+        SubmitHealthModal submission ->
+            case ( model.worksheet, submission ) of
+                ( Just worksheet, Just answers ) ->
+                    let
+                        newWorksheet : Maybe Worksheet
+                        newWorksheet =
+                            Just <| Worksheet.updateHealthAnswers worksheet answers
+                    in
+                    ( { model
+                        | modalState = Nothing
+                        , worksheet = newWorksheet
+                      }
+                    , Cmd.none
+                    )
+
+                _ ->
+                    ( { model | modalState = Nothing }, Cmd.none )
+
 
 updateWorksheet : (Worksheet -> Worksheet) -> Model -> Model
 updateWorksheet fn model =
     { model | worksheet = Maybe.map fn model.worksheet }
 
 
-handleArrow : Direction -> ModalState -> ( ModalState, Cmd Msg )
+handleArrow : Direction -> LifepathModalState -> ( LifepathModalState, Cmd Msg )
 handleArrow direction modalState =
     let
         selectedLifepath : Int
@@ -348,7 +418,7 @@ beginSearchDebounce searchText =
         |> Task.perform (\_ -> SearchTimePassed searchText)
 
 
-searchTimePassed : String -> ModalState -> ModalState
+searchTimePassed : String -> LifepathModalState -> LifepathModalState
 searchTimePassed oldSearchText modalState =
     if oldSearchText == modalState.searchText then
         searchLifepaths modalState
@@ -357,7 +427,7 @@ searchTimePassed oldSearchText modalState =
         modalState
 
 
-searchLifepaths : ModalState -> ModalState
+searchLifepaths : LifepathModalState -> LifepathModalState
 searchLifepaths modalState =
     let
         ( newIndex, hits ) =
@@ -372,18 +442,21 @@ searchLifepaths modalState =
     }
 
 
-updateModal : (ModalState -> ( ModalState, Cmd Msg )) -> Model -> ( Model, Cmd Msg )
-updateModal fn model =
+updateLifepathModal :
+    (LifepathModalState -> ( LifepathModalState, Cmd Msg ))
+    -> Model
+    -> ( Model, Cmd Msg )
+updateLifepathModal fn model =
     case model.modalState of
-        Nothing ->
-            ( model, Cmd.none )
-
-        Just state ->
+        Just (LifepathModal state) ->
             let
                 ( newState, cmd ) =
                     fn state
             in
-            ( { model | modalState = Just newState }, cmd )
+            ( { model | modalState = Just <| LifepathModal newState }, cmd )
+
+        _ ->
+            ( model, Cmd.none )
 
 
 save : Model -> Shared.Model -> Shared.Model
@@ -477,7 +550,8 @@ viewCharacterAndLifepaths model =
     , heading "Lifepaths"
     , viewCharacterLifepaths model.worksheet model.dnd
     , el [ paddingEach { edges | right = 20, bottom = 20 }, alignRight ] <|
-        Components.faintButton "Add Lifepath" (Just <| OpenModal After)
+        Components.faintButton "Add Lifepath" <|
+            OpenLifepathModal After
     ]
 
 
@@ -497,6 +571,7 @@ viewWorksheet worksheet =
             , distributeStats = DistributeStats
             , toggleShade = ToggleShade
             , changeStat = ChangeStat
+            , openHealthModal = OpenHealthModal
             }
 
 
@@ -517,7 +592,8 @@ viewCharacterLifepaths worksheet dnd =
             Just lifepaths ->
                 column [ width fill ] <|
                     [ el [ paddingEach { edges | bottom = 20 }, alignRight ] <|
-                        Components.faintButton "Add Lifepath" (Just <| OpenModal Before)
+                        Components.faintButton "Add Lifepath" <|
+                            OpenLifepathModal Before
                     , el
                         [ width fill
                         , Border.width 1
@@ -535,17 +611,17 @@ modalSearchId =
     "lifepath-search"
 
 
-viewModal : ModalState -> Element Msg
+viewModal : Modal -> Element Msg
 viewModal modalState =
     let
-        selectedLifepath : Maybe Lifepath
-        selectedLifepath =
-            List.drop modalState.selectedLifepath modalState.filteredPaths
-                |> List.head
+        content : List (Element Msg)
+        content =
+            case modalState of
+                LifepathModal state ->
+                    viewLifepathModal state
 
-        submission : Maybe ( ModalOption, Lifepath )
-        submission =
-            Maybe.map (Tuple.pair modalState.option) selectedLifepath
+                HealthQuestionModal answers ->
+                    viewHealthQuestionModal answers
     in
     column
         [ width (fill |> minimum 600)
@@ -553,61 +629,150 @@ viewModal modalState =
         , Background.color Colors.white
         , Border.rounded 8
         ]
-        [ heading "Add Lifepath"
-        , column [ padding 40 ]
-            [ Input.text
-                [ htmlAttribute <| Html.Attributes.id modalSearchId
-                , Common.onEnter <| SubmitModal submission
-                ]
-                { onChange = EnteredModalSearchText
-                , text = modalState.searchText
-                , placeholder = Nothing
-                , label = Input.labelAbove [] <| text "Search"
+        content
+
+
+viewHealthQuestionModal : Worksheet.HealthAnswers -> List (Element Msg)
+viewHealthQuestionModal answers =
+    let
+        healthCheckbox :
+            { label : Element Msg
+            , onChange : Bool -> Worksheet.HealthAnswers
+            , checked : Worksheet.HealthAnswers -> Bool
+            }
+            -> Element Msg
+        healthCheckbox { label, onChange, checked } =
+            Components.questionCheckbox answers
+                { label = label
+                , onChange = onChange
+                , checked = checked
+                , updateMsg = UpdateHealthAnswers
                 }
-            ]
-        , column
-            [ height fill
-            , width fill
-            , Background.color Colors.white
-            , clip
-            , scrollbarY
-            ]
-          <|
-            List.indexedMap
-                (\i lp ->
-                    let
-                        baseAttrs : List (Attribute Msg)
-                        baseAttrs =
-                            [ width fill, Events.onDoubleClick <| SubmitModal submission ]
+    in
+    [ heading "Health Questions"
+    , column [ padding 40, spacing 20 ]
+        [ healthCheckbox
+            { label = text "Does the character live in squalor or filth? Subtract 1."
+            , onChange = \checked -> { answers | squalor = checked }
+            , checked = .squalor
+            }
+        , healthCheckbox
+            { label = text "Is the character frail or sickly? Subtract 1."
+            , onChange = \checked -> { answers | frail = checked }
+            , checked = .frail
+            }
+        , healthCheckbox
+            { label = text "Was the character severely wounded in the past? Subtract 1."
+            , onChange = \checked -> { answers | wounded = checked }
+            , checked = .wounded
+            }
+        , healthCheckbox
+            { label = text "Has the character been tortured and enslaved? Subtract 1."
+            , onChange = \checked -> { answers | enslaved = checked }
+            , checked = .enslaved
+            }
+        , healthCheckbox
+            { label = text "Are you a Dwarf, Elf, or Orc? Add 1."
+            , onChange = \checked -> { answers | immortal = checked }
+            , checked = .immortal
+            }
+        , healthCheckbox
+            { label = text "Is the character athletic and active? Add 1."
+            , onChange = \checked -> { answers | athletic = checked }
+            , checked = .athletic
+            }
+        , healthCheckbox
+            { label =
+                paragraph [ width fill ] <|
+                    [ text "Does the character live in a "
+                    , el [ Font.italic ] <| text "really"
+                    , text " clean and happy place, like the hills in "
+                    , el [ Font.italic ] <| text "The Sound of Music"
+                    , text "? Add 1."
+                    ]
+            , onChange = \checked -> { answers | soundOfMusic = checked }
+            , checked = .soundOfMusic
+            }
+        ]
+    , modalFooter
+        [ Components.faintButton "Cancel" <| SubmitHealthModal Nothing
+        , Components.faintButton "Submit" <| SubmitHealthModal <| Just answers
+        ]
+    ]
 
-                        additionalAttrs : List (Attribute Msg)
-                        additionalAttrs =
-                            if i == modalState.selectedLifepath then
-                                [ Background.color Colors.faint ]
 
-                            else
-                                [ Events.onClick <| SelectedModalLifepath i ]
-                    in
-                    el (baseAttrs ++ additionalAttrs) <|
-                        viewLifepath
-                            { lifepath = lp
-                            , id = "search-result-lp-" ++ String.fromInt i
-                            , warnings = Validation.emptyWarnings
-                            , dndOptions = Nothing
-                            }
-                )
-                modalState.filteredPaths
-        , row
-            [ height fill
-            , Border.rounded 8
-            , Background.color Colors.white
-            , spacing 20
-            , padding 20
-            , alignRight
+viewLifepathModal : LifepathModalState -> List (Element Msg)
+viewLifepathModal modalState =
+    let
+        selectedLifepath : Maybe Lifepath
+        selectedLifepath =
+            List.drop modalState.selectedLifepath modalState.filteredPaths
+                |> List.head
+
+        submission : Maybe ( LifepathModalOption, Lifepath )
+        submission =
+            Maybe.map (Tuple.pair modalState.option) selectedLifepath
+    in
+    [ heading "Add Lifepath"
+    , column [ padding 40 ]
+        [ Input.text
+            [ htmlAttribute <| Html.Attributes.id modalSearchId
+            , Common.onEnter <| SubmitLifepathModal submission
             ]
-            [ Components.faintButton "Cancel" <| Just (SubmitModal Nothing)
-            , Components.faintButton "Add" <| Just (SubmitModal submission)
-            ]
+            { onChange = EnteredModalSearchText
+            , text = modalState.searchText
+            , placeholder = Nothing
+            , label = Input.labelAbove [] <| text "Search"
+            }
+        ]
+    , column
+        [ height fill
+        , width fill
+        , Background.color Colors.white
+        , clip
+        , scrollbarY
+        ]
+      <|
+        List.indexedMap
+            (\i lp ->
+                let
+                    baseAttrs : List (Attribute Msg)
+                    baseAttrs =
+                        [ width fill, Events.onDoubleClick <| SubmitLifepathModal submission ]
+
+                    additionalAttrs : List (Attribute Msg)
+                    additionalAttrs =
+                        if i == modalState.selectedLifepath then
+                            [ Background.color Colors.faint ]
+
+                        else
+                            [ Events.onClick <| SelectedModalLifepath i ]
+                in
+                el (baseAttrs ++ additionalAttrs) <|
+                    viewLifepath
+                        { lifepath = lp
+                        , id = "search-result-lp-" ++ String.fromInt i
+                        , warnings = Validation.emptyWarnings
+                        , dndOptions = Nothing
+                        }
+            )
+            modalState.filteredPaths
+    , modalFooter
+        [ Components.faintButton "Cancel" <| SubmitLifepathModal Nothing
+        , Components.faintButton "Add" <| SubmitLifepathModal submission
+        ]
+    ]
+
+
+modalFooter : List (Element Msg) -> Element Msg
+modalFooter =
+    row
+        [ height fill
+        , Border.rounded 8
+        , Background.color Colors.white
+        , spacing 20
+        , padding 20
+        , alignRight
         ]
 
 

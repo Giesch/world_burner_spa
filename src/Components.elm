@@ -1,7 +1,9 @@
 module Components exposing
-    ( deleteIcon
+    ( QuestionCheckboxOptions
+    , deleteIcon
     , dragHandle
     , faintButton
+    , questionCheckbox
     , superScript
     , tooltip
     , warningIcon
@@ -9,7 +11,7 @@ module Components exposing
     )
 
 import Colors
-import Common
+import Common exposing (corners, edges)
 import Element exposing (..)
 import Element.Background as Background
 import Element.Border as Border
@@ -89,7 +91,7 @@ appIcon icon =
     html <| Icon.viewStyled [ Colors.darkenedHtml ] icon
 
 
-faintButton : String -> Maybe msg -> Element msg
+faintButton : String -> msg -> Element msg
 faintButton label onPress =
     Input.button
         [ Background.color Colors.faint
@@ -97,6 +99,27 @@ faintButton label onPress =
         , paddingXY 15 10
         , Font.size 18
         ]
-        { onPress = onPress
+        { onPress = Just onPress
         , label = text label
+        }
+
+
+type alias QuestionCheckboxOptions answers msg =
+    { onChange : Bool -> answers
+    , label : Element msg
+    , checked : answers -> Bool
+    , updateMsg : answers -> msg
+    }
+
+
+questionCheckbox : answers -> QuestionCheckboxOptions answers msg -> Element msg
+questionCheckbox answers opts =
+    Input.checkbox []
+        { onChange = opts.onChange >> opts.updateMsg
+        , icon = Input.defaultCheckbox
+        , label =
+            Input.labelLeft
+                [ width fill, paddingEach { edges | right = 10 } ]
+                opts.label
+        , checked = opts.checked answers
         }
