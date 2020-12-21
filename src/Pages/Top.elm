@@ -73,6 +73,7 @@ type alias Model =
 type Modal
     = LifepathModal LifepathModalState
     | HealthQuestionModal Worksheet.HealthAnswers
+    | SteelQuestionModal Worksheet.SteelAnswers
 
 
 type alias LifepathModalState =
@@ -153,6 +154,10 @@ type Msg
     | OpenHealthModal
     | UpdateHealthAnswers Worksheet.HealthAnswers
     | SubmitHealthModal (Maybe Worksheet.HealthAnswers)
+    | OpenSteelModal
+    | UpdateSteelAnswers Worksheet.SteelAnswers
+    | SubmitSteelModal (Maybe Worksheet.SteelAnswers)
+    | ToggleSteelShade Shade
     | NoOp
 
 
@@ -367,27 +372,79 @@ update msg model =
                     ( model, Cmd.none )
 
         SubmitHealthModal submission ->
-            case ( model.worksheet, submission ) of
-                ( Just worksheet, Just answers ) ->
+            updateAnswers
+                Worksheet.updateHealthAnswers
+                submission
+                model
+
+        OpenSteelModal ->
+            case model.worksheet of
+                Just worksheet ->
                     let
-                        newWorksheet : Maybe Worksheet
-                        newWorksheet =
-                            Just <| Worksheet.updateHealthAnswers worksheet answers
+                        modalState : Maybe Modal
+                        modalState =
+                            worksheet
+                                |> Worksheet.steelAnswers
+                                |> SteelQuestionModal
+                                |> Just
                     in
-                    ( { model
-                        | modalState = Nothing
-                        , worksheet = newWorksheet
-                      }
+                    ( { model | modalState = modalState }, Cmd.none )
+
+                Nothing ->
+                    ( model, Cmd.none )
+
+        UpdateSteelAnswers newAnswers ->
+            case model.modalState of
+                Just (SteelQuestionModal _) ->
+                    ( { model | modalState = Just <| SteelQuestionModal newAnswers }
                     , Cmd.none
                     )
 
                 _ ->
-                    ( { model | modalState = Nothing }, Cmd.none )
+                    ( model, Cmd.none )
+
+        SubmitSteelModal submission ->
+            updateAnswers
+                Worksheet.updateSteelAnswers
+                submission
+                model
+
+        ToggleSteelShade shade ->
+            let
+                worksheet : Maybe Worksheet
+                worksheet =
+                    Maybe.map (Worksheet.toggleSteelShade shade) model.worksheet
+            in
+            ( { model | worksheet = worksheet }, Cmd.none )
 
 
 updateWorksheet : (Worksheet -> Worksheet) -> Model -> Model
 updateWorksheet fn model =
     { model | worksheet = Maybe.map fn model.worksheet }
+
+
+updateAnswers :
+    (answers -> Worksheet -> Worksheet)
+    -> Maybe answers
+    -> Model
+    -> ( Model, Cmd msg )
+updateAnswers fn submission model =
+    let
+        newWorksheet : Maybe Worksheet
+        newWorksheet =
+            case ( submission, model.worksheet ) of
+                ( Just answers, Just worksheet ) ->
+                    Just <| fn answers worksheet
+
+                ( Nothing, Just worksheet ) ->
+                    Just worksheet
+
+                _ ->
+                    Nothing
+    in
+    ( { model | worksheet = newWorksheet, modalState = Nothing }
+    , Cmd.none
+    )
 
 
 handleArrow : Direction -> LifepathModalState -> ( LifepathModalState, Cmd Msg )
@@ -572,6 +629,8 @@ viewWorksheet worksheet =
             , toggleShade = ToggleShade
             , changeStat = ChangeStat
             , openHealthModal = OpenHealthModal
+            , openSteelModal = OpenSteelModal
+            , toggleSteelShade = ToggleSteelShade
             }
 
 
@@ -622,6 +681,9 @@ viewModal modalState =
 
                 HealthQuestionModal answers ->
                     viewHealthQuestionModal answers
+
+                SteelQuestionModal answers ->
+                    viewSteelQuestionModal answers
     in
     column
         [ width (fill |> minimum 600)
@@ -630,6 +692,98 @@ viewModal modalState =
         , Border.rounded 8
         ]
         content
+
+
+viewSteelQuestionModal : Worksheet.SteelAnswers -> List (Element Msg)
+viewSteelQuestionModal answers =
+    let
+        steelCheckbox :
+            { label : Element Msg
+            , onChange : Bool -> Worksheet.SteelAnswers
+            , checked : Worksheet.SteelAnswers -> Bool
+            }
+            -> Element Msg
+        steelCheckbox { label, onChange, checked } =
+            Components.questionCheckbox answers
+                { label = label
+                , onChange = onChange
+                , checked = checked
+                , updateMsg = UpdateSteelAnswers
+                }
+    in
+    [ heading "Steel Questions"
+    , column [ padding 40, spacing 20 ]
+        [ steelCheckbox
+            { label =
+                paragraph [ width fill ]
+                    [ text "Has the character taken a conscript, soldier, bandit, squire, or knight type lifepath?"
+                    , text " Add 1."
+                    ]
+            , onChange = \checked -> { answers | soldier = checked }
+            , checked = .soldier
+            }
+        , steelCheckbox
+            { label =
+                paragraph [ width fill ]
+                    [ text "Has the character ever been severly wounded?"
+                    , text " If they were, and were a soldier, knight, bandit, etc., add one."
+                    , text " If they were wounded, but not a soldier, subtract 1."
+                    ]
+            , onChange = \checked -> { answers | wounded = checked }
+            , checked = .wounded
+            }
+        , steelCheckbox
+            { label =
+                paragraph [ width fill ]
+                    [ text "Has the character ever murdered or killed with their own hand?"
+                    , text " If they have done so more than once, add 1."
+                    ]
+            , onChange = \checked -> { answers | killer = checked }
+            , checked = .killer
+            }
+        , steelCheckbox
+            { label =
+                paragraph [ width fill ]
+                    [ text "Has the character been tortured, enslaved, or beaten terribly over time?"
+                    , text " If yes, and their Will is 5 or higher, add 1."
+                    , text " If yes, and their Will is 3 or lower, subtract 1."
+                    ]
+            , onChange = \checked -> { answers | enslaved = checked }
+            , checked = .enslaved
+            }
+        , steelCheckbox
+            { label =
+                paragraph [ width fill ]
+                    [ text "Has the character led a sheltered life, free from violence and pain?"
+                    , text " Subtract 1."
+                    ]
+            , onChange = \checked -> { answers | sheltered = checked }
+            , checked = .sheltered
+            }
+        , steelCheckbox
+            { label =
+                paragraph [ width fill ]
+                    [ text "Has the character been raised in a competitive (but non-violent) culture?"
+                    , text " Add 1."
+                    ]
+            , onChange = \checked -> { answers | competitiveCulture = checked }
+            , checked = .competitiveCulture
+            }
+        , steelCheckbox
+            { label =
+                paragraph [ width fill ]
+                    [ text "Has the character given birth to a child?"
+                    , text " Add 1."
+                    ]
+            , onChange = \checked -> { answers | givenBirth = checked }
+            , checked = .givenBirth
+            }
+        ]
+    , modalFooter
+        [ Components.faintButton "Cancel" <| SubmitSteelModal Nothing
+        , Components.faintButton "Submit" <| SubmitSteelModal <| Just answers
+        ]
+    ]
 
 
 viewHealthQuestionModal : Worksheet.HealthAnswers -> List (Element Msg)

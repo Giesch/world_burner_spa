@@ -1,6 +1,7 @@
 module Model.Worksheet exposing
     ( HealthAnswers
     , Stats
+    , SteelAnswers
     , Worksheet
     , age
     , changeStat
@@ -9,9 +10,12 @@ module Model.Worksheet exposing
     , lifepaths
     , new
     , replaceLifepaths
+    , steelAnswers
     , toggleShade
+    , toggleSteelShade
     , updateHealthAnswers
     , updateLifepaths
+    , updateSteelAnswers
     , view
     )
 
@@ -45,6 +49,7 @@ type alias WorksheetData =
     , statsRemaining : ( StatMod.Bonus, StatMod.Bonus )
     , stats : Stats
     , healthAndSteelAnswers : HealthAndSteelAnswers
+    , graySteel : Bool
     }
 
 
@@ -53,19 +58,19 @@ age (Worksheet sheet) =
     sheet.age
 
 
-type alias StatWithShade =
+type alias ShadedStat =
     { value : Int
     , shade : Shade
     }
 
 
 type alias Stats =
-    { will : StatWithShade
-    , perception : StatWithShade
-    , power : StatWithShade
-    , forte : StatWithShade
-    , agility : StatWithShade
-    , speed : StatWithShade
+    { will : ShadedStat
+    , perception : ShadedStat
+    , power : ShadedStat
+    , forte : ShadedStat
+    , agility : ShadedStat
+    , speed : ShadedStat
     }
 
 
@@ -112,8 +117,52 @@ healthAnswers (Worksheet { healthAndSteelAnswers }) =
     }
 
 
-updateHealthAnswers : Worksheet -> HealthAnswers -> Worksheet
-updateHealthAnswers (Worksheet ({ healthAndSteelAnswers } as sheet)) newAnswers =
+type alias SteelAnswers =
+    { soldier : Bool
+    , wounded : Bool
+    , killer : Bool
+    , enslaved : Bool
+    , sheltered : Bool
+    , competitiveCulture : Bool
+    , givenBirth : Bool
+    , gifted : Bool
+    }
+
+
+steelAnswers : Worksheet -> SteelAnswers
+steelAnswers (Worksheet { healthAndSteelAnswers }) =
+    { soldier = healthAndSteelAnswers.soldier
+    , wounded = healthAndSteelAnswers.wounded
+    , killer = healthAndSteelAnswers.killer
+    , enslaved = healthAndSteelAnswers.enslaved
+    , sheltered = healthAndSteelAnswers.sheltered
+    , competitiveCulture = healthAndSteelAnswers.competitiveCulture
+    , givenBirth = healthAndSteelAnswers.givenBirth
+    , gifted = healthAndSteelAnswers.gifted
+    }
+
+
+updateSteelAnswers : SteelAnswers -> Worksheet -> Worksheet
+updateSteelAnswers newAnswers (Worksheet ({ healthAndSteelAnswers } as sheet)) =
+    let
+        fullAnswers : HealthAndSteelAnswers
+        fullAnswers =
+            { healthAndSteelAnswers
+                | soldier = newAnswers.soldier
+                , wounded = newAnswers.wounded
+                , killer = newAnswers.killer
+                , enslaved = newAnswers.enslaved
+                , sheltered = newAnswers.sheltered
+                , competitiveCulture = newAnswers.competitiveCulture
+                , givenBirth = newAnswers.givenBirth
+                , gifted = newAnswers.gifted
+            }
+    in
+    Worksheet { sheet | healthAndSteelAnswers = fullAnswers }
+
+
+updateHealthAnswers : HealthAnswers -> Worksheet -> Worksheet
+updateHealthAnswers newAnswers (Worksheet ({ healthAndSteelAnswers } as sheet)) =
     let
         fullAnswers : HealthAndSteelAnswers
         fullAnswers =
@@ -128,6 +177,11 @@ updateHealthAnswers (Worksheet ({ healthAndSteelAnswers } as sheet)) newAnswers 
             }
     in
     Worksheet { sheet | healthAndSteelAnswers = fullAnswers }
+
+
+toggleSteelShade : Shade -> Worksheet -> Worksheet
+toggleSteelShade shade (Worksheet sheet) =
+    Worksheet { sheet | graySteel = shade == Shade.Gray }
 
 
 defaultAnswers : HealthAndSteelAnswers
@@ -148,22 +202,7 @@ defaultAnswers =
     }
 
 
-healthModifier : HealthAndSteelAnswers -> Int
-healthModifier answers =
-    [ ( answers.squalor, -1 )
-    , ( answers.frail, -1 )
-    , ( answers.wounded, -1 )
-    , ( answers.enslaved, -1 )
-    , ( answers.immortal, 1 )
-    , ( answers.athletic, 1 )
-    , ( answers.soundOfMusic, 1 )
-    ]
-        |> List.filter Tuple.first
-        |> List.map Tuple.second
-        |> List.sum
-
-
-statWithShade : Stat -> Stats -> StatWithShade
+statWithShade : Stat -> Stats -> ShadedStat
 statWithShade stat sheetStats =
     case stat of
         Stat.Will ->
@@ -183,6 +222,36 @@ statWithShade stat sheetStats =
 
         Stat.Speed ->
             sheetStats.speed
+
+
+updateStatVal : Stat -> Int -> Stats -> Stats
+updateStatVal stat value stats =
+    let
+        { shade } =
+            statWithShade stat stats
+
+        newStat : ShadedStat
+        newStat =
+            { value = value, shade = shade }
+    in
+    case stat of
+        Stat.Will ->
+            { stats | will = newStat }
+
+        Stat.Perception ->
+            { stats | perception = newStat }
+
+        Stat.Power ->
+            { stats | power = newStat }
+
+        Stat.Forte ->
+            { stats | forte = newStat }
+
+        Stat.Agility ->
+            { stats | agility = newStat }
+
+        Stat.Speed ->
+            { stats | speed = newStat }
 
 
 zeroStats : Stats
@@ -265,12 +334,12 @@ distributeMental points current =
         current
 
 
-updateStat : StatWithShade -> Int -> StatWithShade
+updateStat : ShadedStat -> Int -> ShadedStat
 updateStat stat value =
     { stat | value = value }
 
 
-updateShade : StatWithShade -> Shade -> StatWithShade
+updateShade : ShadedStat -> Shade -> ShadedStat
 updateShade stat shade =
     { stat | shade = shade }
 
@@ -312,6 +381,7 @@ distributePhysical points current =
 changeStat : Stat -> Int -> Worksheet -> Worksheet
 changeStat stat val (Worksheet sheet) =
     let
+        clampedVal : Int
         clampedVal =
             if val < 1 then
                 1
@@ -319,29 +389,11 @@ changeStat stat val (Worksheet sheet) =
             else
                 val
 
-        currentStats =
-            sheet.stats
-
+        updatedStats : Stats
         updatedStats =
-            case stat of
-                Stat.Will ->
-                    { currentStats | will = { value = clampedVal, shade = Shade.Black } }
+            updateStatVal stat clampedVal sheet.stats
 
-                Stat.Perception ->
-                    { currentStats | perception = { value = clampedVal, shade = Shade.Black } }
-
-                Stat.Power ->
-                    { currentStats | power = { value = clampedVal, shade = Shade.Black } }
-
-                Stat.Forte ->
-                    { currentStats | forte = { value = clampedVal, shade = Shade.Black } }
-
-                Stat.Agility ->
-                    { currentStats | agility = { value = clampedVal, shade = Shade.Black } }
-
-                Stat.Speed ->
-                    { currentStats | speed = { value = clampedVal, shade = Shade.Black } }
-
+        updatedRemaining : ( StatMod.Bonus, StatMod.Bonus )
         updatedRemaining =
             recalculateSpentStats updatedStats <| Tuple.second sheet.statsRemaining
     in
@@ -355,11 +407,34 @@ changeStat stat val (Worksheet sheet) =
 recalculateSpentStats : Stats -> StatMod.Bonus -> ( StatMod.Bonus, StatMod.Bonus )
 recalculateSpentStats currentStats total =
     let
+        subtractShades : StatMod.Bonus -> StatMod.Bonus
+        subtractShades current =
+            { mental =
+                [ currentStats.will.shade
+                , currentStats.perception.shade
+                ]
+                    |> List.map Shade.countGray
+                    |> List.sum
+                    |> (\sum -> current.mental - (sum * 5))
+            , physical =
+                [ currentStats.power.shade
+                , currentStats.forte.shade
+                , currentStats.agility.shade
+                , currentStats.speed.shade
+                ]
+                    |> List.map Shade.countGray
+                    |> List.sum
+                    |> (\sum -> current.physical - (sum * 5))
+            , either = current.either
+            }
+
         subtractStats : StatMod.Bonus -> StatMod.Bonus
         subtractStats current =
             { mental =
                 current.mental
-                    - (currentStats.will.value + currentStats.perception.value)
+                    - (currentStats.will.value
+                        + currentStats.perception.value
+                      )
             , physical =
                 current.physical
                     - List.sum
@@ -394,6 +469,7 @@ recalculateSpentStats currentStats total =
                 current
     in
     ( total
+        |> subtractShades
         |> subtractStats
         |> spendEither
     , total
@@ -416,6 +492,7 @@ newData paths =
     , statsRemaining = lifepathData.statsRemaining
     , stats = allOnes
     , healthAndSteelAnswers = defaultAnswers
+    , graySteel = False
     }
 
 
@@ -590,18 +667,10 @@ reflexes sheet =
         base =
             (perception.value + agility.value + speed.value) // 3
 
-        countGray : Shade -> Int
-        countGray shade =
-            if shade == Shade.Gray then
-                1
-
-            else
-                0
-
         grays : Int
         grays =
             [ perception.shade, agility.shade, speed.shade ]
-                |> List.map countGray
+                |> List.map Shade.countGray
                 |> List.sum
     in
     if grays == 3 then
@@ -633,12 +702,65 @@ health { stats, healthAndSteelAnswers } =
             ( Shade.Black, base + 2 )
 
 
+healthModifier : HealthAndSteelAnswers -> Int
+healthModifier answers =
+    [ ( answers.squalor, -1 )
+    , ( answers.frail, -1 )
+    , ( answers.wounded, -1 )
+    , ( answers.enslaved, -1 )
+    , ( answers.immortal, 1 )
+    , ( answers.athletic, 1 )
+    , ( answers.soundOfMusic, 1 )
+    ]
+        |> List.filter Tuple.first
+        |> List.map Tuple.second
+        |> List.sum
+
+
+steel : WorksheetData -> ( Shade, Int )
+steel sheet =
+    if sheet.graySteel then
+        ( Shade.Gray, steelValue sheet - 5 )
+
+    else
+        ( Shade.Black, steelValue sheet )
+
+
+steelValue : WorksheetData -> Int
+steelValue { healthAndSteelAnswers, stats } =
+    let
+        answers =
+            healthAndSteelAnswers
+    in
+    [ ( answers.soldier, 1 )
+    , ( answers.wounded && answers.soldier, 1 )
+    , ( answers.wounded && not answers.soldier, -1 )
+    , ( answers.killer, 1 )
+    , ( answers.enslaved && stats.will.value >= 5, 1 )
+    , ( answers.enslaved && stats.will.value <= 3, -1 )
+    , ( answers.sheltered, -1 )
+    , ( answers.competitiveCulture, 1 )
+    , ( answers.givenBirth, 1 )
+    , ( answers.gifted, 1 )
+    , ( stats.perception.value >= 6, 1 )
+    , ( stats.will.value >= 5, 1 )
+    , ( stats.will.value >= 7, 1 )
+    , ( stats.forte.value >= 6, 1 )
+    ]
+        |> List.filter Tuple.first
+        |> List.map Tuple.second
+        |> List.sum
+        |> (+) 3
+
+
 type alias Options msg =
     { worksheet : Worksheet
     , distributeStats : msg
     , toggleShade : Stat -> msg
     , changeStat : Stat -> Int -> msg
     , openHealthModal : msg
+    , openSteelModal : msg
+    , toggleSteelShade : Shade -> msg
     }
 
 
@@ -701,10 +823,14 @@ view opts =
                 , Border.rounded 4
                 , Border.width 1
                 , padding 3
+                , Font.size 12
                 ]
                 { onPress = Just msg
                 , label = text "questions"
                 }
+
+        ( steelShade, steelVal ) =
+            steel sheet
     in
     [ el [ padding 20 ] <|
         Components.faintButton "Distribute" opts.distributeStats
@@ -761,6 +887,32 @@ view opts =
             , row [ spacing 10 ]
                 [ viewAttribute "Health" <| health sheet
                 , questionsButton opts.openHealthModal
+                ]
+            , row []
+                [ text "Steel:"
+                , el [ paddingEach { edges | left = 10 } ] <|
+                    Input.button
+                        [ Border.color Colors.shadow
+                        , Border.rounded 3
+                        , Border.width 1
+                        , Font.size 14
+                        , Font.family [ Font.monospace ]
+                        , padding 3
+                        ]
+                        { onPress = Just <| opts.toggleSteelShade <| Shade.toggle steelShade
+                        , label = text <| Shade.toString steelShade
+                        }
+                , el [ paddingEach { edges | left = 2 } ] <|
+                    text (String.fromInt steelVal)
+                , el [ paddingEach { edges | left = 10 } ] <|
+                    questionsButton opts.openSteelModal
+                , el
+                    [ alignTop
+                    , alignLeft
+                    , transparent (steelVal > 0)
+                    , paddingEach { edges | left = 20 }
+                    ]
+                    Components.warningIcon
                 ]
             ]
         ]

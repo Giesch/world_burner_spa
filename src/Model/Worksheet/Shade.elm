@@ -24,3 +24,12 @@ toString shade =
 
         Gray ->
             "G"
+
+
+countGray : Shade -> Int
+countGray shade =
+    if shade == Gray then
+        1
+
+    else
+        0
