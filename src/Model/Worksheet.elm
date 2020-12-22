@@ -758,6 +758,12 @@ hesitation sheet =
     10 - sheet.stats.will.value
 
 
+stride : WorksheetData -> Int
+stride sheet =
+    -- NOTE this should depend on traits/stock
+    6
+
+
 type alias Options msg =
     { worksheet : Worksheet
     , distributeStats : msg
@@ -879,6 +885,7 @@ view opts =
                 ]
             , viewSteel (steel sheet) opts
             , text <| "Hesitation: " ++ String.fromInt (hesitation sheet)
+            , text <| "Stride: " ++ String.fromInt (stride sheet)
             ]
         ]
     ]
