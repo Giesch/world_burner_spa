@@ -764,6 +764,31 @@ stride sheet =
     6
 
 
+circles : WorksheetData -> ( Shade, Int )
+circles sheet =
+    -- NOTE need to factor in 50 res spent bonus
+    let
+        halfWill : Int
+        halfWill =
+            sheet.stats.will.value // 2
+
+        value : Int
+        value =
+            if halfWill > 1 then
+                halfWill
+
+            else
+                1
+    in
+    ( sheet.stats.will.shade, value )
+
+
+resources : WorksheetData -> ( Shade, Int )
+resources sheet =
+    -- NOTE should calculate based on gear spend
+    ( Shade.Black, 0 )
+
+
 type alias Options msg =
     { worksheet : Worksheet
     , distributeStats : msg
@@ -886,6 +911,8 @@ view opts =
             , viewSteel (steel sheet) opts
             , text <| "Hesitation: " ++ String.fromInt (hesitation sheet)
             , text <| "Stride: " ++ String.fromInt (stride sheet)
+            , viewAttribute "Circles" <| circles sheet
+            , viewAttribute "Resources" <| resources sheet
             ]
         ]
     ]
