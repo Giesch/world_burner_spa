@@ -753,6 +753,11 @@ steelValue { healthAndSteelAnswers, stats } =
         |> (+) 3
 
 
+hesitation : WorksheetData -> Int
+hesitation sheet =
+    10 - sheet.stats.will.value
+
+
 type alias Options msg =
     { worksheet : Worksheet
     , distributeStats : msg
@@ -815,22 +820,6 @@ view opts =
         viewAttribute : String -> ( Shade, Int ) -> Element msg
         viewAttribute name ( shade, value ) =
             text <| name ++ ": " ++ Shade.toString shade ++ String.fromInt value
-
-        questionsButton : msg -> Element msg
-        questionsButton msg =
-            Input.button
-                [ Border.color Colors.shadow
-                , Border.rounded 4
-                , Border.width 1
-                , padding 3
-                , Font.size 12
-                ]
-                { onPress = Just msg
-                , label = text "questions"
-                }
-
-        ( steelShade, steelVal ) =
-            steel sheet
     in
     [ el [ padding 20 ] <|
         Components.faintButton "Distribute" opts.distributeStats
@@ -888,35 +877,55 @@ view opts =
                 [ viewAttribute "Health" <| health sheet
                 , questionsButton opts.openHealthModal
                 ]
-            , row []
-                [ text "Steel:"
-                , el [ paddingEach { edges | left = 10 } ] <|
-                    Input.button
-                        [ Border.color Colors.shadow
-                        , Border.rounded 3
-                        , Border.width 1
-                        , Font.size 14
-                        , Font.family [ Font.monospace ]
-                        , padding 3
-                        ]
-                        { onPress = Just <| opts.toggleSteelShade <| Shade.toggle steelShade
-                        , label = text <| Shade.toString steelShade
-                        }
-                , el [ paddingEach { edges | left = 2 } ] <|
-                    text (String.fromInt steelVal)
-                , el [ paddingEach { edges | left = 10 } ] <|
-                    questionsButton opts.openSteelModal
-                , el
-                    [ alignTop
-                    , alignLeft
-                    , transparent (steelVal > 0)
-                    , paddingEach { edges | left = 20 }
-                    ]
-                    Components.warningIcon
-                ]
+            , viewSteel (steel sheet) opts
+            , text <| "Hesitation: " ++ String.fromInt (hesitation sheet)
             ]
         ]
     ]
+
+
+viewSteel : ( Shade, Int ) -> Options msg -> Element msg
+viewSteel ( steelShade, steelVal ) opts =
+    row []
+        [ text "Steel:"
+        , el [ paddingEach { edges | left = 10 } ] <|
+            Input.button
+                [ Border.color Colors.shadow
+                , Border.rounded 3
+                , Border.width 1
+                , Font.size 14
+                , Font.family [ Font.monospace ]
+                , padding 3
+                ]
+                { onPress = Just <| opts.toggleSteelShade <| Shade.toggle steelShade
+                , label = text <| Shade.toString steelShade
+                }
+        , el [ paddingEach { edges | left = 2 } ] <|
+            text (String.fromInt steelVal)
+        , el [ paddingEach { edges | left = 10 } ] <|
+            questionsButton opts.openSteelModal
+        , el
+            [ alignTop
+            , alignLeft
+            , transparent (steelVal > 0)
+            , paddingEach { edges | left = 20 }
+            ]
+            Components.warningIcon
+        ]
+
+
+questionsButton : msg -> Element msg
+questionsButton msg =
+    Input.button
+        [ Border.color Colors.shadow
+        , Border.rounded 4
+        , Border.width 1
+        , padding 3
+        , Font.size 12
+        ]
+        { onPress = Just msg
+        , label = text "questions"
+        }
 
 
 type alias StatRow =
