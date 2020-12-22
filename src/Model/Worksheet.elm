@@ -851,68 +851,143 @@ view opts =
         viewAttribute : String -> ( Shade, Int ) -> Element msg
         viewAttribute name ( shade, value ) =
             text <| name ++ ": " ++ Shade.toString shade ++ String.fromInt value
+
+        mainColumnAttrs : List (Attribute msg)
+        mainColumnAttrs =
+            [ width fill
+            , alignTop
+            , Font.size 18
+            , padding 20
+            , spacing 10
+            ]
     in
     [ el [ padding 20 ] <|
         Components.faintButton "Distribute" opts.distributeStats
     , row []
-        [ table [ Font.size 18, spacing 5, padding 20, height fill ]
-            { data = statRows
-            , columns =
-                [ { header = none
-                  , width = shrink
-                  , view = el [ alignBottom ] << text << Stat.toString << .stat
-                  }
-                , { header = none
-                  , width = shrink
-                  , view = statShadeButton opts.toggleShade
-                  }
-                , { header = none
-                  , width = shrink
-                  , view = el [ alignBottom ] << text << String.fromInt << .value
-                  }
-                , { header = none
-                  , width = shrink
-                  , view = changeStatButtons opts.changeStat
-                  }
-                ]
-            }
-        , column
-            [ width fill
-            , alignTop
-            , Font.size 18
-            , padding 20
-            , spacing 5
+        [ column mainColumnAttrs
+            [ text "Stats:"
+            , table [ spacing 5 ]
+                { data = statRows
+                , columns =
+                    [ { header = none
+                      , width = shrink
+                      , view = el [ alignBottom, paddingEach { edges | right = 10 } ] << text << Stat.toString << .stat
+                      }
+                    , { header = none
+                      , width = shrink
+                      , view = statShadeButton opts.toggleShade
+                      }
+                    , { header = none
+                      , width = shrink
+                      , view = el [ alignBottom ] << text << String.fromInt << .value
+                      }
+                    , { header = none
+                      , width = shrink
+                      , view = changeStatButtons opts.changeStat
+                      }
+                    ]
+                }
             ]
-            [ text "Remaining: "
-            , row [ width fill ]
-                [ text <| "Mental: " ++ viewRemaining .mental
-                , statWarning .mental
+        , column mainColumnAttrs
+            [ text "Remaining:"
+            , table
+                [ spacing 5
+                , width (shrink |> minimum 200)
                 ]
-            , row []
-                [ text <| "Physical: " ++ viewRemaining .physical
-                , statWarning .physical
-                ]
-            , row [] [ text <| "Either: " ++ viewRemaining .either ]
+                { data =
+                    [ { name = "Mental", prop = .mental, warn = True }
+                    , { name = "Physical", prop = .physical, warn = True }
+                    , { name = "Either", prop = .either, warn = False }
+                    ]
+                , columns =
+                    [ { header = none
+                      , width = shrink
+                      , view =
+                            \{ name } ->
+                                text <| name ++ ":"
+                      }
+                    , { header = none
+                      , width = shrink
+                      , view =
+                            \{ prop } ->
+                                text <| viewRemaining prop
+                      }
+                    , { header = none
+                      , width = shrink
+                      , view =
+                            \{ warn, prop } ->
+                                if warn then
+                                    statWarning prop
+
+                                else
+                                    none
+                      }
+                    ]
+                }
             ]
-        , column
-            [ width fill
-            , alignTop
-            , Font.size 18
-            , padding 20
-            , spacing 5
-            ]
+        , column mainColumnAttrs <|
+            let
+                viewShadedVal : ( Shade, Int ) -> Element msg
+                viewShadedVal ( shade, val ) =
+                    text <| Shade.toString shade ++ String.fromInt val
+            in
             [ text "Attributes:"
-            , viewAttribute "Mortal Wound" <| mortalWound sheet
-            , viewAttribute "Reflexes" <| reflexes sheet
-            , row [ spacing 10 ]
-                [ viewAttribute "Health" <| health sheet
-                , questionsButton opts.openHealthModal
-                ]
-            , viewSteel (steel sheet) opts
-            , text <| "Hesitation: " ++ String.fromInt (hesitation sheet)
-            , text <| "Stride: " ++ String.fromInt (stride sheet)
-            , viewAttribute "Circles" <| circles sheet
-            , viewAttribute "Resources" <| resources sheet
+            , table [ spacing 5 ]
+                { data =
+                    [ { name = "Mortal Wound"
+                      , val = viewShadedVal <| mortalWound sheet
+                      , questions = Nothing
+                      }
+                    , { name = "Reflexes"
+                      , val = viewShadedVal <| reflexes sheet
+                      , questions = Nothing
+                      }
+                    , { name = "Health"
+                      , val = viewShadedVal <| health sheet
+                      , questions = Just opts.openHealthModal
+                      }
+                    , { name = "Steel"
+                      , val = viewSteel (steel sheet) opts
+                      , questions = Just opts.openSteelModal
+                      }
+                    , { name = "Hesitation"
+                      , val = text <| String.fromInt <| hesitation sheet
+                      , questions = Nothing
+                      }
+                    , { name = "Stride"
+                      , val = text <| String.fromInt <| stride sheet
+                      , questions = Nothing
+                      }
+                    , { name = "Circles"
+                      , val = viewShadedVal <| circles sheet
+                      , questions = Nothing
+                      }
+                    , { name = "Resources"
+                      , val = viewShadedVal <| resources sheet
+                      , questions = Nothing
+                      }
+                    ]
+                , columns =
+                    [ { header = none
+                      , width = shrink
+                      , view =
+                            \{ name } ->
+                                el [ paddingEach { edges | right = 5 } ] <|
+                                    (text <| name ++ ":")
+                      }
+                    , { header = none
+                      , width = shrink
+                      , view = \{ val } -> val
+                      }
+                    , { header = none
+                      , width = shrink
+                      , view =
+                            \{ questions } ->
+                                Maybe.map questionsButton questions
+                                    |> Maybe.withDefault none
+                      }
+                    ]
+                }
             ]
         ]
     ]
@@ -921,18 +996,18 @@ view opts =
 viewSteel : ( Shade, Int ) -> Options msg -> Element msg
 viewSteel ( steelShade, steelVal ) opts =
     row []
-        [ text "Steel:"
-        , el [ paddingEach { edges | left = 10 } ] <|
-            steelShadeButton opts.toggleSteelShade steelShade
-        , el [ paddingEach { edges | left = 2 } ] <|
+        [ steelShadeButton opts.toggleSteelShade steelShade
+        , el
+            [ paddingEach { edges | left = 2 }
+            , width (shrink |> minimum 20)
+            ]
+          <|
             text (String.fromInt steelVal)
-        , el [ paddingEach { edges | left = 10 } ] <|
-            questionsButton opts.openSteelModal
         , el
             [ alignTop
             , alignLeft
             , transparent (steelVal > 0)
-            , paddingEach { edges | left = 20 }
+            , paddingEach { edges | left = 7 }
             ]
             Components.warningIcon
         ]
@@ -977,7 +1052,7 @@ shadeButton toggle shade =
         , Border.width 1
         , Font.size 14
         , Font.family [ Font.monospace ]
-        , padding 3
+        , padding 2
         ]
         { onPress = Just toggle
         , label = text <| Shade.toString shade
