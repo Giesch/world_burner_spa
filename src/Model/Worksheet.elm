@@ -855,12 +855,12 @@ view opts =
     [ el [ padding 20 ] <|
         Components.faintButton "Distribute" opts.distributeStats
     , row []
-        [ table [ Font.size 18, spacing 5, padding 20 ]
+        [ table [ Font.size 18, spacing 5, padding 20, height fill ]
             { data = statRows
             , columns =
                 [ { header = none
                   , width = shrink
-                  , view = text << Stat.toString << .stat
+                  , view = el [ alignBottom ] << text << Stat.toString << .stat
                   }
                 , { header = none
                   , width = shrink
@@ -868,7 +868,7 @@ view opts =
                   }
                 , { header = none
                   , width = shrink
-                  , view = text << String.fromInt << .value
+                  , view = el [ alignBottom ] << text << String.fromInt << .value
                   }
                 , { header = none
                   , width = shrink
@@ -923,17 +923,7 @@ viewSteel ( steelShade, steelVal ) opts =
     row []
         [ text "Steel:"
         , el [ paddingEach { edges | left = 10 } ] <|
-            Input.button
-                [ Border.color Colors.shadow
-                , Border.rounded 3
-                , Border.width 1
-                , Font.size 14
-                , Font.family [ Font.monospace ]
-                , padding 3
-                ]
-                { onPress = Just <| opts.toggleSteelShade <| Shade.toggle steelShade
-                , label = text <| Shade.toString steelShade
-                }
+            steelShadeButton opts.toggleSteelShade steelShade
         , el [ paddingEach { edges | left = 2 } ] <|
             text (String.fromInt steelVal)
         , el [ paddingEach { edges | left = 10 } ] <|
@@ -971,6 +961,16 @@ type alias StatRow =
 
 statShadeButton : (Stat -> msg) -> StatRow -> Element msg
 statShadeButton toggle { stat, shade } =
+    shadeButton (toggle stat) shade
+
+
+steelShadeButton : (Shade -> msg) -> Shade -> Element msg
+steelShadeButton toggle shade =
+    shadeButton (toggle <| Shade.toggle shade) shade
+
+
+shadeButton : msg -> Shade -> Element msg
+shadeButton toggle shade =
     Input.button
         [ Border.color Colors.shadow
         , Border.rounded 3
@@ -979,7 +979,7 @@ statShadeButton toggle { stat, shade } =
         , Font.family [ Font.monospace ]
         , padding 3
         ]
-        { onPress = Just <| toggle stat
+        { onPress = Just toggle
         , label = text <| Shade.toString shade
         }
 
