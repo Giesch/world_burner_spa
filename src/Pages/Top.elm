@@ -30,7 +30,9 @@ import Model.Lifepath.Validation as Validation exposing (PathWithWarnings, Valid
 import Model.Lifepath.Years as Years exposing (Years)
 import Model.Status as Status exposing (Status)
 import Model.Worksheet as Worksheet exposing (Worksheet)
+import Model.Worksheet.Health as Health
 import Model.Worksheet.Shade as Shade exposing (Shade)
+import Model.Worksheet.ShadedStats as ShadedStats exposing (ShadedStats)
 import Model.Worksheet.Stat as Stat exposing (Stat)
 import Process
 import Shared
@@ -72,7 +74,7 @@ type alias Model =
 
 type Modal
     = LifepathModal LifepathModalState
-    | HealthQuestionModal Worksheet.HealthAnswers
+    | HealthQuestionModal ( ShadedStats, Health.Answers )
     | SteelQuestionModal Worksheet.SteelAnswers
 
 
@@ -152,8 +154,8 @@ type Msg
     | DistributeStats
     | ToggleShade Stat
     | OpenHealthModal
-    | UpdateHealthAnswers Worksheet.HealthAnswers
-    | SubmitHealthModal (Maybe Worksheet.HealthAnswers)
+    | UpdateHealthAnswers Health.Answers
+    | SubmitHealthModal (Maybe Health.Answers)
     | OpenSteelModal
     | UpdateSteelAnswers Worksheet.SteelAnswers
     | SubmitSteelModal (Maybe Worksheet.SteelAnswers)
@@ -351,10 +353,12 @@ update msg model =
                     let
                         modalState : Maybe Modal
                         modalState =
-                            worksheet
-                                |> Worksheet.healthAnswers
-                                |> HealthQuestionModal
-                                |> Just
+                            Just
+                                (HealthQuestionModal
+                                    ( Worksheet.shadedStats worksheet
+                                    , Worksheet.healthAnswers worksheet
+                                    )
+                                )
                     in
                     ( { model | modalState = modalState }, Cmd.none )
 
@@ -363,8 +367,8 @@ update msg model =
 
         UpdateHealthAnswers newAnswers ->
             case model.modalState of
-                Just (HealthQuestionModal _) ->
-                    ( { model | modalState = Just <| HealthQuestionModal newAnswers }
+                Just (HealthQuestionModal ( stats, _ )) ->
+                    ( { model | modalState = Just <| HealthQuestionModal ( stats, newAnswers ) }
                     , Cmd.none
                     )
 
@@ -679,8 +683,8 @@ viewModal modalState =
                 LifepathModal state ->
                     viewLifepathModal state
 
-                HealthQuestionModal answers ->
-                    viewHealthQuestionModal answers
+                HealthQuestionModal ( stats, answers ) ->
+                    viewHealthQuestionModal stats answers
 
                 SteelQuestionModal answers ->
                     viewSteelQuestionModal answers
@@ -786,13 +790,13 @@ viewSteelQuestionModal answers =
     ]
 
 
-viewHealthQuestionModal : Worksheet.HealthAnswers -> List (Element Msg)
-viewHealthQuestionModal answers =
+viewHealthQuestionModal : ShadedStats -> Health.Answers -> List (Element Msg)
+viewHealthQuestionModal stats answers =
     let
         healthCheckbox :
             { label : Element Msg
-            , onChange : Bool -> Worksheet.HealthAnswers
-            , checked : Worksheet.HealthAnswers -> Bool
+            , onChange : Bool -> Health.Answers
+            , checked : Health.Answers -> Bool
             }
             -> Element Msg
         healthCheckbox { label, onChange, checked } =
@@ -801,6 +805,14 @@ viewHealthQuestionModal answers =
                 , onChange = onChange
                 , checked = checked
                 , updateMsg = UpdateHealthAnswers
+                }
+
+        disabledCheckbox : { label : Element Msg, checked : Bool } -> Element Msg
+        disabledCheckbox { label, checked } =
+            Components.disabledCheckbox
+                { label = label
+                , checked = checked
+                , noop = NoOp
                 }
     in
     [ heading "Health Questions"
@@ -825,10 +837,9 @@ viewHealthQuestionModal answers =
             , onChange = \checked -> { answers | enslaved = checked }
             , checked = .enslaved
             }
-        , healthCheckbox
+        , disabledCheckbox
             { label = text "Are you a Dwarf, Elf, or Orc? Add 1."
-            , onChange = \checked -> { answers | immortal = checked }
-            , checked = .immortal
+            , checked = True
             }
         , healthCheckbox
             { label = text "Is the character athletic and active? Add 1."
@@ -847,6 +858,13 @@ viewHealthQuestionModal answers =
             , onChange = \checked -> { answers | soundOfMusic = checked }
             , checked = .soundOfMusic
             }
+        , let
+            ( _, currentHealth ) =
+                Health.compute stats answers
+          in
+          row [ alignRight ]
+            [ text <| "Current: " ++ String.fromInt currentHealth
+            ]
         ]
     , modalFooter
         [ Components.faintButton "Cancel" <| SubmitHealthModal Nothing
@@ -945,20 +963,20 @@ ghostView dnd lifepaths =
     in
     case draggedPath of
         Just { lifepath } ->
-            row
-                ((List.map htmlAttribute <| system.ghostStyles dnd)
-                    -- NOTE order matters for this; we need the width to override ghostStyles
-                    ++ [ Background.color Colors.white
-                       , Border.color Colors.faint
-                       , Border.rounded 8
-                       , Border.width 1
-                       , width shrink
-                       , height (fill |> maximum 50)
-                       , padding 20
-                       , htmlAttribute <| Html.Attributes.style "width" "auto"
-                       ]
-                )
-            <|
+            let
+                overridingStyles : List (Attribute msg)
+                overridingStyles =
+                    [ Background.color Colors.white
+                    , Border.color Colors.faint
+                    , Border.rounded 8
+                    , Border.width 1
+                    , width shrink
+                    , height (fill |> maximum 50)
+                    , padding 20
+                    , htmlAttribute <| Html.Attributes.style "width" "auto"
+                    ]
+            in
+            row (List.map htmlAttribute (system.ghostStyles dnd) ++ overridingStyles) <|
                 [ Components.dragHandle []
                 , text <| toTitleCase lifepath.name
                 , el [ Font.size 18, paddingEach { edges | left = 20 } ] <|
@@ -971,8 +989,13 @@ ghostView dnd lifepaths =
 
 topHeading : String -> Element Msg
 topHeading head =
-    el (Border.roundEach { corners | topLeft = 8, topRight = 8 } :: headingAttrs) <|
-        text head
+    let
+        attrs : List (Attribute Msg)
+        attrs =
+            Border.roundEach { corners | topLeft = 8, topRight = 8 }
+                :: headingAttrs
+    in
+    el attrs <| text head
 
 
 heading : String -> Element Msg

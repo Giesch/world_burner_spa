@@ -1,6 +1,7 @@
 module Components exposing
     ( QuestionCheckboxOptions
     , deleteIcon
+    , disabledCheckbox
     , dragHandle
     , faintButton
     , questionCheckbox
@@ -122,4 +123,29 @@ questionCheckbox answers opts =
                 [ width fill, paddingEach { edges | right = 10 } ]
                 opts.label
         , checked = opts.checked answers
+        }
+
+
+type alias DisabledCheckboxOptions msg =
+    { label : Element msg
+    , checked : Bool
+    , noop : msg
+    }
+
+
+disabledCheckbox : DisabledCheckboxOptions msg -> Element msg
+disabledCheckbox { label, checked, noop } =
+    Input.checkbox
+        [ Element.htmlAttribute <| Html.Attributes.style "cursor" "default"
+        ]
+        { onChange = \_ -> noop
+        , icon = Input.defaultCheckbox
+        , label =
+            Input.labelLeft
+                [ width fill
+                , paddingEach { edges | right = 10 }
+                , Font.color Colors.shadow
+                ]
+                label
+        , checked = checked
         }
