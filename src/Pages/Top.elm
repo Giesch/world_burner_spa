@@ -34,6 +34,7 @@ import Model.Worksheet.Health as Health
 import Model.Worksheet.Shade as Shade exposing (Shade)
 import Model.Worksheet.ShadedStats as ShadedStats exposing (ShadedStats)
 import Model.Worksheet.Stat as Stat exposing (Stat)
+import Model.Worksheet.Steel as Steel
 import Process
 import Shared
 import Spa.Document exposing (Document)
@@ -75,7 +76,7 @@ type alias Model =
 type Modal
     = LifepathModal LifepathModalState
     | HealthQuestionModal ( ShadedStats, Health.Answers )
-    | SteelQuestionModal Worksheet.SteelAnswers
+    | SteelQuestionModal ( ShadedStats, Steel.Answers )
 
 
 type alias LifepathModalState =
@@ -157,8 +158,8 @@ type Msg
     | UpdateHealthAnswers Health.Answers
     | SubmitHealthModal (Maybe Health.Answers)
     | OpenSteelModal
-    | UpdateSteelAnswers Worksheet.SteelAnswers
-    | SubmitSteelModal (Maybe Worksheet.SteelAnswers)
+    | UpdateSteelAnswers Steel.Answers
+    | SubmitSteelModal (Maybe Steel.Answers)
     | ToggleSteelShade Shade
     | NoOp
 
@@ -353,12 +354,11 @@ update msg model =
                     let
                         modalState : Maybe Modal
                         modalState =
-                            Just
-                                (HealthQuestionModal
+                            Just <|
+                                HealthQuestionModal
                                     ( Worksheet.shadedStats worksheet
                                     , Worksheet.healthAnswers worksheet
                                     )
-                                )
                     in
                     ( { model | modalState = modalState }, Cmd.none )
 
@@ -387,10 +387,11 @@ update msg model =
                     let
                         modalState : Maybe Modal
                         modalState =
-                            worksheet
-                                |> Worksheet.steelAnswers
-                                |> SteelQuestionModal
-                                |> Just
+                            Just <|
+                                SteelQuestionModal
+                                    ( Worksheet.shadedStats worksheet
+                                    , Worksheet.steelAnswers worksheet
+                                    )
                     in
                     ( { model | modalState = modalState }, Cmd.none )
 
@@ -399,8 +400,8 @@ update msg model =
 
         UpdateSteelAnswers newAnswers ->
             case model.modalState of
-                Just (SteelQuestionModal _) ->
-                    ( { model | modalState = Just <| SteelQuestionModal newAnswers }
+                Just (SteelQuestionModal ( stats, _ )) ->
+                    ( { model | modalState = Just <| SteelQuestionModal ( stats, newAnswers ) }
                     , Cmd.none
                     )
 
@@ -630,7 +631,7 @@ viewWorksheet worksheet =
         :: Worksheet.view
             { worksheet = worksheet
             , distributeStats = DistributeStats
-            , toggleShade = ToggleShade
+            , toggleStatShade = ToggleShade
             , changeStat = ChangeStat
             , openHealthModal = OpenHealthModal
             , openSteelModal = OpenSteelModal
@@ -686,8 +687,8 @@ viewModal modalState =
                 HealthQuestionModal ( stats, answers ) ->
                     viewHealthQuestionModal stats answers
 
-                SteelQuestionModal answers ->
-                    viewSteelQuestionModal answers
+                SteelQuestionModal ( stats, answers ) ->
+                    viewSteelQuestionModal stats answers
     in
     column
         [ width (fill |> minimum 600)
@@ -698,179 +699,159 @@ viewModal modalState =
         content
 
 
-viewSteelQuestionModal : Worksheet.SteelAnswers -> List (Element Msg)
-viewSteelQuestionModal answers =
+viewSteelQuestionModal : ShadedStats -> Steel.Answers -> List (Element Msg)
+viewSteelQuestionModal stats answers =
     let
-        steelCheckbox :
-            { label : Element Msg
-            , onChange : Bool -> Worksheet.SteelAnswers
-            , checked : Worksheet.SteelAnswers -> Bool
-            }
-            -> Element Msg
-        steelCheckbox { label, onChange, checked } =
-            Components.questionCheckbox answers
-                { label = label
-                , onChange = onChange
-                , checked = checked
-                , updateMsg = UpdateSteelAnswers
-                }
+        viewModifierQuestion : Steel.ModifierView -> Element Msg
+        viewModifierQuestion modifier =
+            let
+                label =
+                    paragraph [ width (fill |> maximum 600) ] [ text modifier.question ]
+            in
+            case modifier.update of
+                Just onChange ->
+                    Components.questionCheckbox
+                        { label = label
+                        , onChange = onChange
+                        , checked = Common.isJust modifier.value
+                        , updateMsg = UpdateSteelAnswers
+                        }
+
+                Nothing ->
+                    Components.disabledCheckbox
+                        { label = label
+                        , checked = Common.isJust modifier.value
+                        , noop = NoOp
+                        }
+
+        viewModifierValue : Steel.ModifierView -> Element Msg
+        viewModifierValue modifier =
+            let
+                val =
+                    Maybe.withDefault 0 modifier.value
+
+                plus =
+                    if val >= 0 then
+                        "+"
+
+                    else
+                        ""
+            in
+            el [ centerX, centerY ] <| text <| plus ++ String.fromInt val
     in
     [ heading "Steel Questions"
-    , column [ padding 40, spacing 20 ]
-        [ steelCheckbox
-            { label =
-                paragraph [ width fill ]
-                    [ text "Has the character taken a conscript, soldier, bandit, squire, or knight type lifepath?"
-                    , text " Add 1."
-                    ]
-            , onChange = \checked -> { answers | soldier = checked }
-            , checked = .soldier
+    , el [ scrollbarY, width fill, height fill ] <|
+        table [ padding 40, spacing 20, width fill, height fill ]
+            { data = List.map (Steel.viewModifier ( stats, answers )) Steel.modifiers
+            , columns =
+                [ { header = none
+                  , width = shrink
+                  , view = viewModifierQuestion
+                  }
+                , { header = none
+                  , width = shrink
+                  , view = viewModifierValue
+                  }
+                ]
             }
-        , steelCheckbox
-            { label =
-                paragraph [ width fill ]
-                    [ text "Has the character ever been severly wounded?"
-                    , text " If they were, and were a soldier, knight, bandit, etc., add one."
-                    , text " If they were wounded, but not a soldier, subtract 1."
-                    ]
-            , onChange = \checked -> { answers | wounded = checked }
-            , checked = .wounded
-            }
-        , steelCheckbox
-            { label =
-                paragraph [ width fill ]
-                    [ text "Has the character ever murdered or killed with their own hand?"
-                    , text " If they have done so more than once, add 1."
-                    ]
-            , onChange = \checked -> { answers | killer = checked }
-            , checked = .killer
-            }
-        , steelCheckbox
-            { label =
-                paragraph [ width fill ]
-                    [ text "Has the character been tortured, enslaved, or beaten terribly over time?"
-                    , text " If yes, and their Will is 5 or higher, add 1."
-                    , text " If yes, and their Will is 3 or lower, subtract 1."
-                    ]
-            , onChange = \checked -> { answers | enslaved = checked }
-            , checked = .enslaved
-            }
-        , steelCheckbox
-            { label =
-                paragraph [ width fill ]
-                    [ text "Has the character led a sheltered life, free from violence and pain?"
-                    , text " Subtract 1."
-                    ]
-            , onChange = \checked -> { answers | sheltered = checked }
-            , checked = .sheltered
-            }
-        , steelCheckbox
-            { label =
-                paragraph [ width fill ]
-                    [ text "Has the character been raised in a competitive (but non-violent) culture?"
-                    , text " Add 1."
-                    ]
-            , onChange = \checked -> { answers | competitiveCulture = checked }
-            , checked = .competitiveCulture
-            }
-        , steelCheckbox
-            { label =
-                paragraph [ width fill ]
-                    [ text "Has the character given birth to a child?"
-                    , text " Add 1."
-                    ]
-            , onChange = \checked -> { answers | givenBirth = checked }
-            , checked = .givenBirth
-            }
-        ]
     , modalFooter
-        [ Components.faintButton "Cancel" <| SubmitSteelModal Nothing
-        , Components.faintButton "Submit" <| SubmitSteelModal <| Just answers
-        ]
+        { onSubmit = SubmitSteelModal (Just answers)
+        , onCancel = SubmitSteelModal Nothing
+        , summary =
+            Just <|
+                modifierSummary
+                    { base = String.fromInt Steel.base
+                    , mod = String.fromInt <| Steel.modifier stats answers
+                    , total = String.fromInt <| Steel.value stats answers
+                    }
+        , submitWord = "Submit"
+        }
     ]
 
 
 viewHealthQuestionModal : ShadedStats -> Health.Answers -> List (Element Msg)
 viewHealthQuestionModal stats answers =
     let
-        healthCheckbox :
-            { label : Element Msg
-            , onChange : Bool -> Health.Answers
-            , checked : Health.Answers -> Bool
-            }
-            -> Element Msg
-        healthCheckbox { label, onChange, checked } =
-            Components.questionCheckbox answers
-                { label = label
-                , onChange = onChange
-                , checked = checked
-                , updateMsg = UpdateHealthAnswers
+        viewModifierQuestion : Health.ModifierView -> Element Msg
+        viewModifierQuestion modifier =
+            let
+                label : Element msg
+                label =
+                    paragraph [ width (fill |> maximum 600) ] [ text modifier.question ]
+            in
+            case modifier.update of
+                Just onChange ->
+                    Components.questionCheckbox
+                        { label = label
+                        , onChange = onChange
+                        , checked = Common.isJust modifier.value
+                        , updateMsg = UpdateHealthAnswers
+                        }
+
+                Nothing ->
+                    Components.disabledCheckbox
+                        { label = label
+                        , checked = Common.isJust modifier.value
+                        , noop = NoOp
+                        }
+
+        ( shade, base ) =
+            Health.base stats
+
+        mod =
+            Health.modifier answers
+
+        current =
+            Health.compute stats answers |> Tuple.second
+
+        summary =
+            modifierSummary
+                { base = Shade.toString shade ++ String.fromInt base
+                , mod = String.fromInt mod
+                , total = Shade.toString shade ++ String.fromInt current
                 }
 
-        disabledCheckbox : { label : Element Msg, checked : Bool } -> Element Msg
-        disabledCheckbox { label, checked } =
-            Components.disabledCheckbox
-                { label = label
-                , checked = checked
-                , noop = NoOp
-                }
+        viewModifierValue : Health.ModifierView -> Element Msg
+        viewModifierValue modifier =
+            let
+                val =
+                    Maybe.withDefault 0 modifier.value
+
+                plus =
+                    if val >= 0 then
+                        "+"
+
+                    else
+                        ""
+            in
+            el [ centerX, centerY ] <| text <| plus ++ String.fromInt val
     in
     [ heading "Health Questions"
-    , column [ padding 40, spacing 20 ]
-        [ healthCheckbox
-            { label = text "Does the character live in squalor or filth? Subtract 1."
-            , onChange = \checked -> { answers | squalor = checked }
-            , checked = .squalor
-            }
-        , healthCheckbox
-            { label = text "Is the character frail or sickly? Subtract 1."
-            , onChange = \checked -> { answers | frail = checked }
-            , checked = .frail
-            }
-        , healthCheckbox
-            { label = text "Was the character severely wounded in the past? Subtract 1."
-            , onChange = \checked -> { answers | wounded = checked }
-            , checked = .wounded
-            }
-        , healthCheckbox
-            { label = text "Has the character been tortured and enslaved? Subtract 1."
-            , onChange = \checked -> { answers | enslaved = checked }
-            , checked = .enslaved
-            }
-        , disabledCheckbox
-            { label = text "Are you a Dwarf, Elf, or Orc? Add 1."
-            , checked = True
-            }
-        , healthCheckbox
-            { label = text "Is the character athletic and active? Add 1."
-            , onChange = \checked -> { answers | athletic = checked }
-            , checked = .athletic
-            }
-        , healthCheckbox
-            { label =
-                paragraph [ width fill ] <|
-                    [ text "Does the character live in a "
-                    , el [ Font.italic ] <| text "really"
-                    , text " clean and happy place, like the hills in "
-                    , el [ Font.italic ] <| text "The Sound of Music"
-                    , text "? Add 1."
-                    ]
-            , onChange = \checked -> { answers | soundOfMusic = checked }
-            , checked = .soundOfMusic
-            }
-        , let
-            ( _, currentHealth ) =
-                Health.compute stats answers
-          in
-          row [ alignRight ]
-            [ text <| "Current: " ++ String.fromInt currentHealth
+    , table [ padding 40, spacing 20, width fill, height fill ] <|
+        { data = List.map (Health.viewModifier answers) Health.modifiers
+        , columns =
+            [ { header = none
+              , width = shrink
+              , view = viewModifierQuestion
+              }
+            , { header = none
+              , width = shrink
+              , view = viewModifierValue
+              }
             ]
-        ]
+        }
     , modalFooter
-        [ Components.faintButton "Cancel" <| SubmitHealthModal Nothing
-        , Components.faintButton "Submit" <| SubmitHealthModal <| Just answers
-        ]
+        { onSubmit = SubmitHealthModal (Just answers)
+        , onCancel = SubmitHealthModal Nothing
+        , summary = Just summary
+        , submitWord = "Submit"
+        }
     ]
+
+
+modifierSummary : { base : String, mod : String, total : String } -> String
+modifierSummary { base, mod, total } =
+    "Base " ++ base ++ " + Modifier " ++ mod ++ " = " ++ total
 
 
 viewLifepathModal : LifepathModalState -> List (Element Msg)
@@ -930,21 +911,37 @@ viewLifepathModal modalState =
             )
             modalState.filteredPaths
     , modalFooter
-        [ Components.faintButton "Cancel" <| SubmitLifepathModal Nothing
-        , Components.faintButton "Add" <| SubmitLifepathModal submission
-        ]
+        { onSubmit = SubmitLifepathModal submission
+        , onCancel = SubmitLifepathModal Nothing
+        , summary = Nothing
+        , submitWord = "Add"
+        }
     ]
 
 
-modalFooter : List (Element Msg) -> Element Msg
-modalFooter =
+type alias FooterOpts msg =
+    { onCancel : msg
+    , onSubmit : msg
+    , summary : Maybe String
+    , submitWord : String
+    }
+
+
+modalFooter : FooterOpts msg -> Element msg
+modalFooter { onCancel, onSubmit, summary, submitWord } =
     row
         [ height fill
+        , width fill
         , Border.rounded 8
         , Background.color Colors.white
         , spacing 20
         , padding 20
         , alignRight
+        , alignBottom
+        ]
+        [ el [ alignLeft ] <| Maybe.withDefault none <| Maybe.map text summary
+        , el [ alignRight ] <| Components.faintButton "Cancel" onCancel
+        , el [ alignRight ] <| Components.faintButton submitWord onSubmit
         ]
 
 

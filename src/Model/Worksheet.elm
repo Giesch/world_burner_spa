@@ -1,6 +1,5 @@
 module Model.Worksheet exposing
-    ( SteelAnswers
-    , Worksheet
+    ( Worksheet
     , age
     , changeStat
     , distributeStats
@@ -42,6 +41,7 @@ import Model.Worksheet.ShadedStats as ShadedStats
         , ShadedStats
         )
 import Model.Worksheet.Stat as Stat exposing (Stat)
+import Model.Worksheet.Steel as Steel
 
 
 type Worksheet
@@ -105,32 +105,25 @@ justHealthAnswers answers =
     }
 
 
-type alias SteelAnswers =
-    { soldier : Bool
-    , wounded : Bool
-    , killer : Bool
-    , enslaved : Bool
-    , sheltered : Bool
-    , competitiveCulture : Bool
-    , givenBirth : Bool
-    , gifted : Bool
-    }
-
-
-steelAnswers : Worksheet -> SteelAnswers
+steelAnswers : Worksheet -> Steel.Answers
 steelAnswers (Worksheet { healthAndSteelAnswers }) =
-    { soldier = healthAndSteelAnswers.soldier
-    , wounded = healthAndSteelAnswers.wounded
-    , killer = healthAndSteelAnswers.killer
-    , enslaved = healthAndSteelAnswers.enslaved
-    , sheltered = healthAndSteelAnswers.sheltered
-    , competitiveCulture = healthAndSteelAnswers.competitiveCulture
-    , givenBirth = healthAndSteelAnswers.givenBirth
-    , gifted = healthAndSteelAnswers.gifted
+    justSteelAnswers healthAndSteelAnswers
+
+
+justSteelAnswers : HealthAndSteelAnswers -> Steel.Answers
+justSteelAnswers answers =
+    { soldier = answers.soldier
+    , wounded = answers.wounded
+    , killer = answers.killer
+    , enslaved = answers.enslaved
+    , sheltered = answers.sheltered
+    , competitiveCulture = answers.competitiveCulture
+    , givenBirth = answers.givenBirth
+    , gifted = answers.gifted
     }
 
 
-updateSteelAnswers : SteelAnswers -> Worksheet -> Worksheet
+updateSteelAnswers : Steel.Answers -> Worksheet -> Worksheet
 updateSteelAnswers newAnswers (Worksheet ({ healthAndSteelAnswers } as sheet)) =
     let
         fullAnswers : HealthAndSteelAnswers
@@ -591,39 +584,19 @@ health { stats, healthAndSteelAnswers } =
 
 
 steel : WorksheetData -> ( Shade, Int )
-steel sheet =
-    if sheet.graySteel then
-        ( Shade.Gray, steelValue sheet - 5 )
-
-    else
-        ( Shade.Black, steelValue sheet )
-
-
-steelValue : WorksheetData -> Int
-steelValue { healthAndSteelAnswers, stats } =
+steel { stats, healthAndSteelAnswers, graySteel } =
     let
         answers =
-            healthAndSteelAnswers
+            justSteelAnswers healthAndSteelAnswers
+
+        val =
+            Steel.value stats answers
     in
-    [ ( answers.soldier, 1 )
-    , ( answers.wounded && answers.soldier, 1 )
-    , ( answers.wounded && not answers.soldier, -1 )
-    , ( answers.killer, 1 )
-    , ( answers.enslaved && stats.will.value >= 5, 1 )
-    , ( answers.enslaved && stats.will.value <= 3, -1 )
-    , ( answers.sheltered, -1 )
-    , ( answers.competitiveCulture, 1 )
-    , ( answers.givenBirth, 1 )
-    , ( answers.gifted, 1 )
-    , ( stats.perception.value >= 6, 1 )
-    , ( stats.will.value >= 5, 1 )
-    , ( stats.will.value >= 7, 1 )
-    , ( stats.forte.value >= 6, 1 )
-    ]
-        |> List.filter Tuple.first
-        |> List.map Tuple.second
-        |> List.sum
-        |> (+) 3
+    if graySteel then
+        ( Shade.Gray, val - 5 )
+
+    else
+        ( Shade.Black, val )
 
 
 hesitation : WorksheetData -> Int
@@ -665,7 +638,7 @@ resources sheet =
 type alias Options msg =
     { worksheet : Worksheet
     , distributeStats : msg
-    , toggleShade : Stat -> msg
+    , toggleStatShade : Stat -> msg
     , changeStat : Stat -> Int -> msg
     , openHealthModal : msg
     , openSteelModal : msg
@@ -747,14 +720,14 @@ view opts =
                       }
                     , { header = none
                       , width = shrink
-                      , view = statShadeButton opts.toggleShade
+                      , view = toggleShadeButton (.stat >> opts.toggleStatShade)
                       }
                     , { header = none
-                      , width = shrink
+                      , width = shrink |> minimum 25
                       , view =
-                            \{ value } ->
+                            \{ value, shade } ->
                                 el [ alignBottom ] <|
-                                    (text <| String.fromInt value)
+                                    (text <| Shade.toString shade ++ String.fromInt value)
                       }
                     , { header = none
                       , width = shrink
@@ -805,6 +778,9 @@ view opts =
                 viewShadedVal : ( Shade, Int ) -> Element msg
                 viewShadedVal ( shade, val ) =
                     text <| Shade.toString shade ++ String.fromInt val
+
+                steelName =
+                    "Steel"
             in
             [ text "Attributes:"
             , table [ spacing 5 ]
@@ -812,46 +788,66 @@ view opts =
                     [ { name = "Mortal Wound"
                       , val = viewShadedVal <| mortalWound sheet
                       , questions = Nothing
+                      , warning = False
                       }
                     , { name = "Reflexes"
                       , val = viewShadedVal <| reflexes sheet
                       , questions = Nothing
+                      , warning = False
                       }
                     , { name = "Health"
                       , val = viewShadedVal <| health sheet
                       , questions = Just opts.openHealthModal
+                      , warning = False
                       }
-                    , { name = "Steel"
-                      , val = viewSteel (steel sheet) opts
+                    , let
+                        shadedSteel =
+                            steel sheet
+                      in
+                      { name = steelName
+                      , val = viewShadedVal shadedSteel
                       , questions = Just opts.openSteelModal
+                      , warning = Tuple.second shadedSteel < 0
                       }
                     , { name = "Hesitation"
                       , val = text <| String.fromInt <| hesitation sheet
                       , questions = Nothing
+                      , warning = False
                       }
                     , { name = "Stride"
                       , val = text <| String.fromInt <| stride sheet
                       , questions = Nothing
+                      , warning = False
                       }
                     , { name = "Circles"
                       , val = viewShadedVal <| circles sheet
                       , questions = Nothing
+                      , warning = False
                       }
                     , { name = "Resources"
                       , val = viewShadedVal <| resources sheet
                       , questions = Nothing
+                      , warning = False
                       }
                     ]
                 , columns =
                     [ { header = none
                       , width = shrink
                       , view =
-                            \{ name } ->
+                            \{ name, warning } ->
+                                let
+                                    icon =
+                                        if warning then
+                                            el [ alignRight ] <| Components.warningIcon
+
+                                        else
+                                            none
+                                in
                                 el [ paddingEach { edges | right = 5 } ] <|
-                                    (text <| name ++ ":")
+                                    row [ width fill ] [ text <| name ++ ":", icon ]
                       }
                     , { header = none
-                      , width = shrink
+                      , width = shrink |> minimum 40
                       , view = .val
                       }
                     , { header = none
@@ -861,45 +857,23 @@ view opts =
                                 Maybe.map questionsButton questions
                                     |> Maybe.withDefault none
                       }
+                    , { header = none
+                      , width = shrink
+                      , view =
+                            \row ->
+                                if row.name == steelName then
+                                    toggleShadeButton
+                                        (\_ -> opts.toggleSteelShade <| Shade.toggle <| Tuple.first <| steel sheet)
+                                        row
+
+                                else
+                                    none
+                      }
                     ]
                 }
             ]
         ]
     ]
-
-
-viewSteel : ( Shade, Int ) -> Options msg -> Element msg
-viewSteel ( steelShade, steelVal ) opts =
-    row []
-        [ steelShadeButton opts.toggleSteelShade steelShade
-        , el
-            [ paddingEach { edges | left = 2 }
-            , width (shrink |> minimum 20)
-            ]
-          <|
-            text (String.fromInt steelVal)
-        , el
-            [ alignTop
-            , alignLeft
-            , transparent (steelVal > 0)
-            , paddingEach { edges | left = 7 }
-            ]
-            Components.warningIcon
-        ]
-
-
-questionsButton : msg -> Element msg
-questionsButton msg =
-    Input.button
-        [ Border.color Colors.shadow
-        , Border.rounded 4
-        , Border.width 1
-        , padding 3
-        , Font.size 12
-        ]
-        { onPress = Just msg
-        , label = text "questions"
-        }
 
 
 type alias StatRow =
@@ -909,29 +883,30 @@ type alias StatRow =
     }
 
 
-statShadeButton : (Stat -> msg) -> StatRow -> Element msg
-statShadeButton toggle { stat, shade } =
-    shadeButton (toggle stat) shade
-
-
-steelShadeButton : (Shade -> msg) -> Shade -> Element msg
-steelShadeButton toggle shade =
-    shadeButton (toggle <| Shade.toggle shade) shade
-
-
-shadeButton : msg -> Shade -> Element msg
-shadeButton toggle shade =
+textButton : msg -> String -> Element msg
+textButton msg label =
     Input.button
         [ Border.color Colors.shadow
-        , Border.rounded 3
+        , Border.rounded 4
         , Border.width 1
-        , Font.size 14
-        , Font.family [ Font.monospace ]
-        , padding 2
+        , padding 3
+        , Font.size 12
+        , centerX
+        , centerY
         ]
-        { onPress = Just toggle
-        , label = text <| Shade.toString shade
+        { onPress = Just msg
+        , label = el [ centerX, centerY ] <| text label
         }
+
+
+questionsButton : msg -> Element msg
+questionsButton msg =
+    textButton msg "questions"
+
+
+toggleShadeButton : (row -> msg) -> row -> Element msg
+toggleShadeButton toggle row =
+    textButton (toggle row) "shade"
 
 
 changeStatButtons : (Stat -> Int -> msg) -> StatRow -> Element msg

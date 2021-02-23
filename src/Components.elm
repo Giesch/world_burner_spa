@@ -108,13 +108,13 @@ faintButton label onPress =
 type alias QuestionCheckboxOptions answers msg =
     { onChange : Bool -> answers
     , label : Element msg
-    , checked : answers -> Bool
+    , checked : Bool
     , updateMsg : answers -> msg
     }
 
 
-questionCheckbox : answers -> QuestionCheckboxOptions answers msg -> Element msg
-questionCheckbox answers opts =
+questionCheckbox : QuestionCheckboxOptions answers msg -> Element msg
+questionCheckbox opts =
     Input.checkbox []
         { onChange = opts.onChange >> opts.updateMsg
         , icon = Input.defaultCheckbox
@@ -122,7 +122,7 @@ questionCheckbox answers opts =
             Input.labelLeft
                 [ width fill, paddingEach { edges | right = 10 } ]
                 opts.label
-        , checked = opts.checked answers
+        , checked = opts.checked
         }
 
 

@@ -4,6 +4,7 @@ module Common exposing
     , corners
     , edges
     , insertIntoNonEmpty
+    , isJust
     , onEnter
     , overlappingPairs
     , pairDecoder
@@ -27,22 +28,36 @@ corners =
     { topLeft = 0, topRight = 0, bottomLeft = 0, bottomRight = 0 }
 
 
-overlappingPairs : List a -> List ( a, Maybe a )
+overlappingPairs : List a -> List ( a, a )
 overlappingPairs list =
     case list of
         [] ->
             []
 
-        first :: [] ->
-            [ ( first, Nothing ) ]
+        _ :: [] ->
+            []
 
         first :: second :: rest ->
-            ( first, Just second ) :: overlappingPairs (second :: rest)
+            ( first, second ) :: overlappingPairs (second :: rest)
 
 
 clamp : ( comparable, comparable ) -> comparable -> comparable
 clamp ( minimum, maximum ) val =
     min (max val minimum) maximum
+
+
+{-| Unfortunately, this seems useful in some cases with Elm UI tables,
+where you're not given the whole row at once.
+Don't use it elsewhere.
+-}
+isJust : Maybe a -> Bool
+isJust m =
+    case m of
+        Just _ ->
+            True
+
+        Nothing ->
+            False
 
 
 appendIntoNonEmpty : List a -> a -> NonEmpty a
