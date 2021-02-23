@@ -28,17 +28,17 @@ corners =
     { topLeft = 0, topRight = 0, bottomLeft = 0, bottomRight = 0 }
 
 
-overlappingPairs : List a -> List ( a, a )
+overlappingPairs : List a -> List ( a, Maybe a )
 overlappingPairs list =
     case list of
         [] ->
             []
 
-        _ :: [] ->
-            []
+        first :: [] ->
+            [ ( first, Nothing ) ]
 
         first :: second :: rest ->
-            ( first, second ) :: overlappingPairs (second :: rest)
+            ( first, Just second ) :: overlappingPairs (second :: rest)
 
 
 clamp : ( comparable, comparable ) -> comparable -> comparable

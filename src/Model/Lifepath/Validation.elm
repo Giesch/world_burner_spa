@@ -202,39 +202,39 @@ checkFirstRequirement { lifepath, warnings } =
 
 
 checkLeads : NonEmpty PathWithWarnings -> NonEmpty PathWithWarnings
-checkLeads (( first, rest ) as all) =
+checkLeads ( first, rest ) =
     let
         initial : NonEmpty PathWithWarnings
         initial =
-            case List.head rest of
-                Just second ->
-                    NonEmpty.singleton <| leadWarning first second
-
-                Nothing ->
-                    all
+            NonEmpty.singleton <| leadWarning first <| List.head rest
     in
     List.foldl checkLeadPair initial <| Common.overlappingPairs rest
 
 
 checkLeadPair :
-    ( PathWithWarnings, PathWithWarnings )
+    ( PathWithWarnings, Maybe PathWithWarnings )
     -> NonEmpty PathWithWarnings
     -> NonEmpty PathWithWarnings
 checkLeadPair ( current, next ) paths =
     NonEmpty.append paths <| NonEmpty.singleton <| leadWarning current next
 
 
-leadWarning : PathWithWarnings -> PathWithWarnings -> PathWithWarnings
-leadWarning current next =
+leadWarning : PathWithWarnings -> Maybe PathWithWarnings -> PathWithWarnings
+leadWarning current maybeNext =
     let
         currentWarnings =
             current.warnings
     in
-    if leadSatisfied current.lifepath next.lifepath then
-        current
+    case maybeNext of
+        Just next ->
+            if leadSatisfied current.lifepath next.lifepath then
+                current
 
-    else
-        { current | warnings = { currentWarnings | hasLead = False } }
+            else
+                { current | warnings = { currentWarnings | hasLead = False } }
+
+        Nothing ->
+            current
 
 
 leadSatisfied : Lifepath -> Lifepath -> Bool
