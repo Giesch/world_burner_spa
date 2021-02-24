@@ -584,7 +584,7 @@ view model =
             Maybe.map Worksheet.lifepaths model.worksheet
                 |> Maybe.withDefault []
     in
-    { title = "Charred Knockoff"
+    { title = "Rogue Wizard"
     , modal = Maybe.map viewModal model.modalState
     , body =
         List.concat

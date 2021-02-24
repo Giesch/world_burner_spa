@@ -1,6 +1,6 @@
 # World Burner SPA
 
-Frontend for a burning wheel character creator, inspired by Charred.
+Frontend for roguewizard.net, a burning wheel character creator inspired by Charred.
 
 ### Elm-SPA commands to know
 
