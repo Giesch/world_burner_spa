@@ -33,6 +33,7 @@ import Model.Lifepath.StatMod as StatMod exposing (StatMod)
 import Model.Lifepath.Validation as Validation exposing (PathWithWarnings, ValidatedLifepaths)
 import Model.Lifepath.Years as Years
 import Model.Worksheet.Constants as Constants
+import Model.Worksheet.Greed as Greed
 import Model.Worksheet.Health as Health
 import Model.Worksheet.Shade as Shade exposing (Shade)
 import Model.Worksheet.ShadedStats as ShadedStats
