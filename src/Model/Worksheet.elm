@@ -32,14 +32,10 @@ import Model.Lifepath as Lifepath exposing (Lifepath)
 import Model.Lifepath.StatMod as StatMod exposing (StatMod)
 import Model.Lifepath.Validation as Validation exposing (PathWithWarnings, ValidatedLifepaths)
 import Model.Lifepath.Years as Years
-import Model.Worksheet.Constants as Constants
+import Model.Stock as Stock exposing (Stock)
 import Model.Worksheet.Health as Health
 import Model.Worksheet.Shade as Shade exposing (Shade)
-import Model.Worksheet.ShadedStats as ShadedStats
-    exposing
-        ( ShadedStat
-        , ShadedStats
-        )
+import Model.Worksheet.ShadedStats as ShadedStats exposing (ShadedStats)
 import Model.Worksheet.Stat as Stat exposing (Stat)
 import Model.Worksheet.Steel as Steel
 
@@ -49,7 +45,8 @@ type Worksheet
 
 
 type alias WorksheetData =
-    { lifepaths : ValidatedLifepaths
+    { ageRanges : List Stock.AgeRange
+    , lifepaths : ValidatedLifepaths
     , age : Int
     , statsRemaining : ( StatMod.Bonus, StatMod.Bonus )
     , stats : ShadedStats
@@ -216,7 +213,7 @@ replaceLifepaths paths (Worksheet sheet) =
     let
         lifepathData : LifepathData
         lifepathData =
-            recalculateLifepathData sheet.stats paths
+            recalculateLifepathData sheet.ageRanges sheet.stats paths
     in
     Worksheet
         { sheet
@@ -395,18 +392,19 @@ recalculateSpentStats currentStats total =
     )
 
 
-new : NonEmpty Lifepath -> Worksheet
-new paths =
-    Worksheet <| newData paths
+new : List Stock.AgeRange -> NonEmpty Lifepath -> Worksheet
+new ranges paths =
+    Worksheet <| newData ranges paths
 
 
-newData : NonEmpty Lifepath -> WorksheetData
-newData paths =
+newData : List Stock.AgeRange -> NonEmpty Lifepath -> WorksheetData
+newData ranges paths =
     let
         lifepathData =
-            recalculateLifepathData allOnes paths
+            recalculateLifepathData ranges allOnes paths
     in
-    { lifepaths = lifepathData.lifepaths
+    { ageRanges = ranges
+    , lifepaths = lifepathData.lifepaths
     , age = lifepathData.age
     , statsRemaining = lifepathData.statsRemaining
     , stats = allOnes
@@ -424,8 +422,12 @@ type alias LifepathData =
     }
 
 
-recalculateLifepathData : ShadedStats -> NonEmpty Lifepath -> LifepathData
-recalculateLifepathData currentStats paths =
+recalculateLifepathData :
+    List Stock.AgeRange
+    -> ShadedStats
+    -> NonEmpty Lifepath
+    -> LifepathData
+recalculateLifepathData ranges currentStats paths =
     let
         newAge : Int
         newAge =
@@ -433,7 +435,7 @@ recalculateLifepathData currentStats paths =
 
         totalStats : StatMod.Bonus
         totalStats =
-            StatMod.addBonus (ageStats newAge) (lifepathBonuses paths)
+            StatMod.addBonus (ageStats ranges newAge) (lifepathBonuses paths)
 
         recalculatedStatsRemaining : ( StatMod.Bonus, StatMod.Bonus )
         recalculatedStatsRemaining =
@@ -464,18 +466,18 @@ sumAge paths =
         |> Years.age
 
 
-ageStats : Int -> StatMod.Bonus
-ageStats a =
+ageStats : List Stock.AgeRange -> Int -> StatMod.Bonus
+ageStats ranges a =
     let
-        inRange : Constants.AgeTableRow -> Bool
+        inRange : Stock.AgeRange -> Bool
         inRange { minAge, maxAge } =
             minAge <= a && maxAge >= a
 
-        ageRowToBonus : Constants.AgeTableRow -> StatMod.Bonus
+        ageRowToBonus : Stock.AgeRange -> StatMod.Bonus
         ageRowToBonus { physical, mental } =
             { physical = physical, mental = mental, either = 0 }
     in
-    Constants.dwarfAgeTable
+    ranges
         |> List.filter inRange
         |> List.head
         |> Maybe.map ageRowToBonus

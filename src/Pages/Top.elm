@@ -29,6 +29,7 @@ import Model.Lifepath.Trait as Trait exposing (Trait)
 import Model.Lifepath.Validation as Validation exposing (PathWithWarnings, ValidatedLifepaths)
 import Model.Lifepath.Years as Years exposing (Years)
 import Model.Status as Status exposing (Status)
+import Model.Stock as Stock exposing (Stock)
 import Model.Worksheet as Worksheet exposing (Worksheet)
 import Model.Worksheet.Health as Health
 import Model.Worksheet.Shade as Shade exposing (Shade)
@@ -65,11 +66,17 @@ type alias Params =
 
 
 type alias Model =
-    { searchableLifepaths : Status LifepathIndex
+    { dwarves : Status LoadedDwarves
     , name : String
     , dnd : DnDList.Model
     , modalState : Maybe Modal
     , worksheet : Maybe Worksheet
+    }
+
+
+type alias LoadedDwarves =
+    { ageRanges : List Stock.AgeRange
+    , lifepathIndex : LifepathIndex
     }
 
 
@@ -125,13 +132,13 @@ dndConfig =
 
 init : Shared.Model -> Url Params -> ( Model, Cmd Msg )
 init shared { params } =
-    ( { searchableLifepaths = Status.Loading
+    ( { dwarves = Status.Loading
       , name = ""
       , worksheet = Nothing
       , dnd = system.model
       , modalState = Nothing
       }
-    , Api.lifepaths GotLifepaths
+    , Api.stocks GotStocks
     )
 
 
@@ -140,7 +147,7 @@ init shared { params } =
 
 
 type Msg
-    = GotLifepaths (Result Http.Error (List Lifepath))
+    = GotStocks (Result Http.Error (List Stock))
     | DnDMsg DnDList.Msg
     | EnteredName String
     | RemoveLifepath Int
@@ -176,21 +183,30 @@ update msg model =
         NoOp ->
             ( model, Cmd.none )
 
-        GotLifepaths (Ok allLifepaths) ->
+        GotStocks (Ok ({ lifepaths, ageRanges } :: _)) ->
             let
-                searchableLifepaths : Status LifepathIndex
-                searchableLifepaths =
-                    case LifepathIndex.new allLifepaths of
+                lifepathIndex : Status LifepathIndex
+                lifepathIndex =
+                    case LifepathIndex.new lifepaths of
                         Just searchIndex ->
                             Status.Loaded searchIndex
 
                         Nothing ->
                             Status.Failed
-            in
-            ( { model | searchableLifepaths = searchableLifepaths }, Cmd.none )
 
-        GotLifepaths (Err _) ->
-            ( { model | searchableLifepaths = Status.Failed }, Cmd.none )
+                dwarves : Status LoadedDwarves
+                dwarves =
+                    Status.map
+                        (\index -> { lifepathIndex = index, ageRanges = ageRanges })
+                        lifepathIndex
+            in
+            ( { model | dwarves = dwarves }, Cmd.none )
+
+        GotStocks (Ok []) ->
+            ( { model | dwarves = Status.Failed }, Cmd.none )
+
+        GotStocks (Err _) ->
+            ( { model | dwarves = Status.Failed }, Cmd.none )
 
         EnteredName name ->
             ( { model | name = name }, Cmd.none )
@@ -226,12 +242,12 @@ update msg model =
             ( { model | worksheet = newWorksheet }, Cmd.none )
 
         OpenLifepathModal modalOption ->
-            case model.searchableLifepaths of
-                Status.Loaded searchableLifepaths ->
+            case model.dwarves of
+                Status.Loaded { lifepathIndex } ->
                     let
                         modalState : Maybe Modal
                         modalState =
-                            newLifepathModal searchableLifepaths modalOption
+                            newLifepathModal lifepathIndex modalOption
                                 |> LifepathModal
                                 |> Just
                     in
@@ -243,8 +259,8 @@ update msg model =
                     ( model, Cmd.none )
 
         SatisfyRequirement requirement index ->
-            case model.searchableLifepaths of
-                Status.Loaded searchableLifepaths ->
+            case model.dwarves of
+                Status.Loaded { lifepathIndex } ->
                     let
                         option : LifepathModalOption
                         option =
@@ -252,7 +268,7 @@ update msg model =
 
                         modalState : Maybe Modal
                         modalState =
-                            newLifepathModal searchableLifepaths option
+                            newLifepathModal lifepathIndex option
                                 |> LifepathModal
                                 |> Just
                     in
@@ -292,16 +308,22 @@ update msg model =
                                 addedLifepath
                                 index
             in
-            ( { model
-                | modalState = Nothing
-                , worksheet =
-                    model.worksheet
-                        |> Maybe.map (Worksheet.replaceLifepaths characterLifepaths)
-                        |> Maybe.withDefault (Worksheet.new characterLifepaths)
-                        |> Just
-              }
-            , Cmd.none
-            )
+            case model.dwarves of
+                Status.Loaded { ageRanges } ->
+                    ( { model
+                        | modalState = Nothing
+                        , worksheet =
+                            model.worksheet
+                                |> Maybe.map (Worksheet.replaceLifepaths characterLifepaths)
+                                |> Maybe.withDefault (Worksheet.new ageRanges characterLifepaths)
+                                |> Just
+                      }
+                    , Cmd.none
+                    )
+
+                _ ->
+                    -- NOTE invalid state
+                    ( model, Cmd.none )
 
         SelectedModalLifepath index ->
             updateLifepathModal
